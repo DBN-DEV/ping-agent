@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+option go_package = ".;grpc";
+package controller_grpc;
+
+
+message PingCommand {
+  string ip = 1;
+  uint32 timeoutMs = 2;
+  uint32 intervalMs = 3;
+}
+
+message PingCommandsResponse {
+  repeated PingCommand commands = 1;
+}
+
+message CommandRequest {
+  uint32 agentId = 1;
+}
+
+message CommandCheckSumResponse {
+  string checkSum = 1;
+}
+
+service Controller {
+  rpc GetCommandCheckSum (CommandRequest) returns (CommandCheckSumResponse);
+  rpc GetPingCommand (CommandRequest) returns (PingCommandsResponse);
+}
+
