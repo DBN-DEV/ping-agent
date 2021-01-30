@@ -1,7 +1,7 @@
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use socket2::{Protocol, SockAddr, Socket, Type};
 use std::io::Result;
 use tokio::io::unix::AsyncFd;
-use bytes::{Bytes, BytesMut, BufMut, Buf};
 use tracing::info;
 
 #[allow(dead_code)]
@@ -15,8 +15,8 @@ pub(crate) struct PingSocket {
 }
 
 impl PingSocket {
-    pub(crate) fn new(domain_: Domain) -> Result<Self> {
-        let domain = match domain_ {
+    pub(crate) fn new(domain: &Domain) -> Result<Self> {
+        let domain = match domain {
             Domain::V4 => socket2::Domain::ipv4(),
             Domain::V6 => socket2::Domain::ipv6(),
         };
@@ -84,11 +84,11 @@ impl PingSocket {
             }
             let buf = buf.freeze();
             let seq = buf.slice(6..9).get_u16();
-            if seq != expect_seq {
+            if seq == expect_seq {
+                return Ok(());
+            } else {
                 info!("Recv packet seq:{} != expect seq:{}", seq, expect_seq);
                 continue;
-            } else {
-                return Ok(())
             }
         }
     }

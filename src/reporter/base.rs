@@ -24,7 +24,7 @@ impl Reporter {
     }
 
     fn build_request(&self, result: PingResult) -> SingleReportRequest {
-        let mut rtt_sec = 0f32;
+        let mut rtt_sec = 0_f32;
         if let Some(rtt) = result.rtt {
             rtt_sec = rtt.as_secs_f32();
         }
@@ -41,23 +41,18 @@ impl Reporter {
         }
     }
 
-    async fn keep_trying_connect_to_server(
-        server_addr: &str,
-    ) -> CollectorClient<Channel> {
+    async fn keep_trying_connect_to_server(server_addr: &str) -> CollectorClient<Channel> {
         loop {
             let client = CollectorClient::connect(String::from(server_addr)).await;
-            match client {
-                Ok(c) => {
-                    info!("Connect to collector success.");
-                    return c;
-                }
-                Err(_) => {
-                    let mut rng = rand::rngs::SmallRng::from_entropy();
-                    let rand_num = rng.gen_range(0..=5);
-                    let wait = BASE_CONNECT_RETRY_INTERVAL + rand_num;
-                    warn!("Connect to report error, wait {} secs retry", wait);
-                    tokio::time::sleep(time::Duration::from_secs(wait)).await;
-                }
+            if let Ok(c) = client {
+                info!("Connect to collector success.");
+                return c;
+            } else {
+                let mut rng = rand::rngs::SmallRng::from_entropy();
+                let rand_num = rng.gen_range(0..=5);
+                let wait = BASE_CONNECT_RETRY_INTERVAL + rand_num;
+                warn!("Connect to report error, wait {} secs retry", wait);
+                tokio::time::sleep(time::Duration::from_secs(wait)).await;
             }
         }
     }
@@ -66,25 +61,23 @@ impl Reporter {
         let mut client: Option<CollectorClient<Channel>> = None;
         loop {
             let result = ping_result_rx.recv().await;
-            let result = match result {
-                Some(r) => r,
-                None => {
-                    // 不可能发生tx被回收事件 如果发生了那直接退出进程
-                    error!("All result tx was drop!");
-                    std::process::exit(1);
-                }
+            let result = if let Some(r) = result {
+                r
+            } else {
+                // 不可能发生tx被回收事件 如果发生了那直接退出进程
+                error!("All result tx was drop!");
+                std::process::exit(1);
             };
 
-            match client {
-                Some(ref mut inner_client) => {
-                    let request = self.build_request(result);
-                    let result = inner_client.ping_single_report(request).await;
-                    match result {
-                        Ok(_) => continue,
-                        Err(_) => client = None,
-                    }
+            if let Some(ref mut inner_client) = client {
+                let request = self.build_request(result);
+                let result = inner_client.ping_single_report(request).await;
+                match result {
+                    Ok(_) => continue,
+                    Err(_) => client = None,
                 }
-                None => client = Some(Self::keep_trying_connect_to_server(&self.server_addr).await),
+            } else {
+                client = Some(Self::keep_trying_connect_to_server(&self.server_addr).await);
             };
         }
     }

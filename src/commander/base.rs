@@ -132,15 +132,14 @@ impl Commander {
         let mut commands = Vec::with_capacity(commands_resp.commands.len());
         for command in commands_resp.commands {
             let ip = command.ip.parse::<IpAddr>();
-            let ip = match ip {
-                Ok(ip) => ip,
-                Err(_) => {
-                    warn!("parse ip:{} fail", command.ip);
-                    continue;
-                }
+            let ip = if let Ok(ip) = ip {
+                ip
+            } else {
+                warn!("parse ip:{} fail", command.ip);
+                continue;
             };
-            let timeout = time::Duration::from_millis(command.timeout_ms as u64);
-            let interval = time::Duration::from_millis(command.interval_ms as u64);
+            let timeout = time::Duration::from_millis(u64::from(command.timeout_ms));
+            let interval = time::Duration::from_millis(u64::from(command.timeout_ms));
             let ping_command = PingCommand {
                 ip,
                 address: command.ip,

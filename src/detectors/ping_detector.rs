@@ -37,8 +37,8 @@ impl PingDetector {
         exited_tx: Sender<()>,
     ) {
         let dst = SocketAddrV4::new(ip, 0).into();
-        let mut seq = Wrapping(0u16);
-        let sock = PingSocket::new(Domain::V4);
+        let mut seq = Wrapping(0_u16);
+        let sock = PingSocket::new(&Domain::V4);
         let sock = match sock {
             Ok(s) => s,
             Err(e) => {
@@ -136,28 +136,22 @@ impl PingDetector {
                     "Command change start to stop all ping tasks. total {}",
                     total
                 );
-                match self.exit_signal_tx.send(()) {
-                    Ok(_) => (),
-                    Err(_) => {
-                        error!("Exit signal tx fail.");
-                        std::process::exit(1);
-                    }
+                if let Err(e) = self.exit_signal_tx.send(()) {
+                    error!("Exit signal tx fail. error: {}", e);
+                    std::process::exit(1);
                 }
                 let mut completed_num = 0;
                 'inner: loop {
-                    match self.exited_rx.recv().await {
-                        Some(_) => {
-                            completed_num += 1;
-                            if completed_num == total {
-                                info!("All tasks was stop.");
-                                break 'inner;
-                            }
+                    if self.exited_rx.recv().await.is_some() {
+                        completed_num += 1;
+                        if completed_num == total {
+                            info!("All tasks was stop.");
+                            break 'inner;
                         }
-                        None => {
-                            // tx 不可能失效，如果 tx 失效则直接退出进程
-                            error!("Completed rx fail.");
-                            std::process::exit(1);
-                        }
+                    } else {
+                        // tx 不可能失效，如果 tx 失效则直接退出进程
+                        error!("Completed rx fail.");
+                        std::process::exit(1);
                     }
                 }
             }
