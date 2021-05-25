@@ -1,7 +1,8 @@
 use crate::reporter::collector_grpc::collector_client::CollectorClient;
 use crate::reporter::collector_grpc::PingResult as GrpcPingResult;
-use crate::reporter::collector_grpc::SingleReportRequest;
-use crate::util::PingResult;
+use crate::reporter::collector_grpc::TcpPingResult as GrpcTcpPingResult;
+use crate::reporter::collector_grpc::{SingleReportRequest, SingleTcpPingReportRequest};
+use crate::util::{PingResult, Result, TcpPingResult};
 use rand::{Rng, SeedableRng};
 use std::time;
 use tokio::sync::mpsc::Receiver;
@@ -23,7 +24,7 @@ impl Reporter {
         }
     }
 
-    fn build_request(&self, result: PingResult) -> SingleReportRequest {
+    fn build_ping_request(&self, result: PingResult) -> SingleReportRequest {
         let mut rtt_sec = 0_f32;
         if let Some(rtt) = result.rtt {
             rtt_sec = rtt.as_secs_f32();
@@ -38,6 +39,25 @@ impl Reporter {
         SingleReportRequest {
             agent_id: self.agent_id,
             result: Some(grpc_result),
+        }
+    }
+
+    fn build_tcp_ping_request(&self, result: TcpPingResult) -> SingleTcpPingReportRequest {
+        let mut rtt_sec = 0_f32;
+        if let Some(rtt) = result.rtt {
+            rtt_sec = rtt.as_secs_f32();
+        }
+
+        let result = GrpcTcpPingResult {
+            target: result.target,
+            is_timeout: result.is_timeout,
+            rtt: rtt_sec,
+            send_at: result.send_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+        };
+
+        SingleTcpPingReportRequest {
+            agent_id: self.agent_id,
+            result: Some(result),
         }
     }
 
@@ -57,7 +77,7 @@ impl Reporter {
         }
     }
 
-    pub async fn start_loop(&self, mut ping_result_rx: Receiver<PingResult>) {
+    pub async fn start_loop(&self, mut ping_result_rx: Receiver<Result>) {
         let mut client: Option<CollectorClient<Channel>> = None;
         loop {
             let result = ping_result_rx.recv().await;
@@ -66,15 +86,27 @@ impl Reporter {
             } else {
                 // 不可能发生tx被回收事件 如果发生了那直接退出进程
                 error!("All result tx was drop!");
-                std::process::exit(1);
+                std::process::abort();
             };
 
             if let Some(ref mut inner_client) = client {
-                let request = self.build_request(result);
-                let result = inner_client.ping_single_report(request).await;
                 match result {
-                    Ok(_) => continue,
-                    Err(_) => client = None,
+                    Result::PingResult(r) => {
+                        let request = self.build_ping_request(r);
+                        let result = inner_client.ping_single_report(request).await;
+                        match result {
+                            Ok(_) => continue,
+                            Err(_) => client = None,
+                        }
+                    }
+                    Result::TcpPingResult(r) => {
+                        let request = self.build_tcp_ping_request(r);
+                        let result = inner_client.tcp_ping_single_report(request).await;
+                        match result {
+                            Ok(_) => continue,
+                            Err(_) => client = None,
+                        }
+                    }
                 }
             } else {
                 client = Some(Self::keep_trying_connect_to_server(&self.server_addr).await);

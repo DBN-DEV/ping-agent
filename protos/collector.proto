@@ -12,6 +12,13 @@ message PingResult {
   string time = 4;
 }
 
+message TcpPingResult {
+  string target = 1;
+  bool isTimeout = 2;
+  float rtt = 3;
+  string sendAt = 4;
+}
+
 message BatchReportRequest {
   repeated PingResult results = 1;
   uint32 agentId = 2;
@@ -22,7 +29,14 @@ message SingleReportRequest {
   uint32 agentId = 2;
 }
 
+message SingleTcpPingReportRequest {
+  TcpPingResult result = 1;
+  uint32 agentId = 2;
+}
+
 service Collector {
   rpc PingBatchReport (BatchReportRequest) returns (Empty);
   rpc PingSingleReport (SingleReportRequest) returns (Empty);
+
+  rpc TcpPingSingleReport (SingleTcpPingReportRequest) returns (Empty);
 }

@@ -1,11 +1,11 @@
 use super::controller_grpc::controller_client::ControllerClient;
 use super::controller_grpc::CommandRequest;
-use crate::commander::controller_grpc::{CommandCheckSumResponse, PingCommandsResponse};
-use crate::util::PingCommand;
-use anyhow::Result;
+use crate::commander::controller_grpc::{CommandCheckSumResponse, CommandsResponse};
+use crate::util::{PingCommand, TcpPingCommand};
 use rand::{Rng, SeedableRng};
 use std::net::IpAddr;
 use std::process;
+use std::result::Result::Err;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
 use tracing::{debug, error, info, warn};
@@ -13,6 +13,7 @@ use tracing::{debug, error, info, warn};
 const BASE_CONNECT_TO_CONTROLLER_RETRY_INTERVAL: u64 = 10;
 
 type Client = ControllerClient<tonic::transport::Channel>;
+type Result<T> = std::result::Result<T, tonic::Status>;
 
 #[derive(Debug)]
 pub struct Commander {
@@ -57,7 +58,11 @@ impl Commander {
         }
     }
 
-    pub(crate) async fn start_loop(&self, ping_command_tx: Sender<Vec<PingCommand>>) {
+    pub(crate) async fn start_loop(
+        &self,
+        ping_command_tx: Sender<Vec<PingCommand>>,
+        tcp_ping_command_tx: Sender<Vec<TcpPingCommand>>,
+    ) {
         let mut now_check_sum = String::new();
         let mut client =
             Self::keep_trying_connect_to_controller(self.controller_addr.clone()).await;
@@ -106,7 +111,12 @@ impl Commander {
                     c
                 }
             };
-            Self::build_and_send_ping_commands(ping_command_tx.clone(), commands).await;
+            Self::build_and_send_commands(
+                ping_command_tx.clone(),
+                tcp_ping_command_tx.clone(),
+                commands,
+            )
+            .await;
         }
     }
 
@@ -119,18 +129,19 @@ impl Commander {
         Ok(command_check_sum_response.into_inner())
     }
 
-    async fn get_ping_commands(client: &mut Client, agent_id: u32) -> Result<PingCommandsResponse> {
+    async fn get_ping_commands(client: &mut Client, agent_id: u32) -> Result<CommandsResponse> {
         let request = CommandRequest { agent_id };
         let ping_command_from_controller = client.get_ping_command(request).await?;
         Ok(ping_command_from_controller.into_inner())
     }
 
-    async fn build_and_send_ping_commands(
+    async fn build_and_send_commands(
         ping_command_tx: Sender<Vec<PingCommand>>,
-        commands_resp: PingCommandsResponse,
+        tcp_ping_command_tx: Sender<Vec<TcpPingCommand>>,
+        commands_resp: CommandsResponse,
     ) {
-        let mut commands = Vec::with_capacity(commands_resp.commands.len());
-        for command in commands_resp.commands {
+        let mut ping_commands = Vec::with_capacity(commands_resp.ping_commands.len());
+        for command in commands_resp.ping_commands {
             let ip = command.ip.parse::<IpAddr>();
             let ip = if let Ok(ip) = ip {
                 ip
@@ -146,15 +157,32 @@ impl Commander {
                 interval,
                 timeout,
             };
-            commands.push(ping_command)
+            ping_commands.push(ping_command)
         }
-        let r = ping_command_tx.send(commands).await;
+        let r = ping_command_tx.send(ping_commands).await;
         match r {
             Ok(_) => (),
             Err(e) => {
-                error!("Send commands to ping detector fail!, {}", e);
+                error!("Send ping_commands to ping detector fail!, {}", e);
                 process::exit(1);
             }
+        }
+
+        let mut tcp_ping_commands = Vec::with_capacity(commands_resp.tcp_ping_commands.len());
+        for command in commands_resp.tcp_ping_commands {
+            let timeout = time::Duration::from_millis(u64::from(command.timeout_ms));
+            let interval = time::Duration::from_millis(u64::from(command.interval_ms));
+            let tcp_ping_command = TcpPingCommand {
+                target: command.target,
+                timeout,
+                interval,
+            };
+            tcp_ping_commands.push(tcp_ping_command);
+        }
+        let r = tcp_ping_command_tx.send(tcp_ping_commands).await;
+        if let Err(e) = r {
+            error!("Send tcp_ping_commands to tcp ping detector fail!, {}", e);
+            process::abort();
         }
     }
 }

@@ -12,6 +12,17 @@ pub struct PingResult {
     pub time: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TcpPingResult {
+    #[prost(string, tag = "1")]
+    pub target: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub is_timeout: bool,
+    #[prost(float, tag = "3")]
+    pub rtt: f32,
+    #[prost(string, tag = "4")]
+    pub send_at: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BatchReportRequest {
     #[prost(message, repeated, tag = "1")]
     pub results: ::prost::alloc::vec::Vec<PingResult>,
@@ -22,6 +33,13 @@ pub struct BatchReportRequest {
 pub struct SingleReportRequest {
     #[prost(message, optional, tag = "1")]
     pub result: ::core::option::Option<PingResult>,
+    #[prost(uint32, tag = "2")]
+    pub agent_id: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SingleTcpPingReportRequest {
+    #[prost(message, optional, tag = "1")]
+    pub result: ::core::option::Option<TcpPingResult>,
     #[prost(uint32, tag = "2")]
     pub agent_id: u32,
 }
@@ -86,6 +104,22 @@ pub mod collector_client {
             let codec = tonic::codec::ProstCodec::default();
             let path =
                 http::uri::PathAndQuery::from_static("/collector_grpc.Collector/PingSingleReport");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn tcp_ping_single_report(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SingleTcpPingReportRequest>,
+        ) -> Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/collector_grpc.Collector/TcpPingSingleReport",
+            );
             self.inner.unary(request.into_request(), path, codec).await
         }
     }

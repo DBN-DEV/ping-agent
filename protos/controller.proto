@@ -10,8 +10,15 @@ message PingCommand {
   uint32 intervalMs = 3;
 }
 
-message PingCommandsResponse {
-  repeated PingCommand commands = 1;
+message TcpPingCommand {
+  string target = 1;
+  uint32 timeoutMs = 2;
+  uint32 intervalMs = 3;
+}
+
+message CommandsResponse {
+  repeated PingCommand pingCommands = 1;
+  repeated TcpPingCommand tcpPingCommands = 2;
 }
 
 message CommandRequest {
@@ -24,6 +31,5 @@ message CommandCheckSumResponse {
 
 service Controller {
   rpc GetCommandCheckSum (CommandRequest) returns (CommandCheckSumResponse);
-  rpc GetPingCommand (CommandRequest) returns (PingCommandsResponse);
+  rpc GetPingCommand (CommandRequest) returns (CommandsResponse);
 }
-

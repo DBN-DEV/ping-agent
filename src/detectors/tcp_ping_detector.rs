@@ -1,22 +1,21 @@
-use super::ping_socket::{Domain, PingSocket};
-use crate::util::{PingCommand, PingResult, Result};
-use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
-use std::num::Wrapping;
-use tokio::sync::broadcast;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time;
+use tokio::net::TcpStream;
+use tokio::sync::broadcast;
+use tokio::sync::mpsc::{Sender, Receiver, channel};
+use crate::util::{TcpPingResult, TcpPingCommand, Result};
+
 use tracing::{error, info};
 
 const SMOOTH_MICROS: u64 = 1_000_000;
-const PING_PACKET_LEN: usize = 64;
 
-pub struct PingDetector {
+
+pub struct TcpPingDetector {
     exited_tx: Sender<()>,
     exited_rx: Receiver<()>,
     exit_signal_tx: broadcast::Sender<()>,
 }
 
-impl PingDetector {
+impl TcpPingDetector {
     pub fn new() -> Self {
         let (exited_tx, exited_rx) = channel(10);
         let (exit_signal_tx, _) = broadcast::channel(1);
@@ -27,66 +26,40 @@ impl PingDetector {
         }
     }
 
-    async fn ping_v4(
-        address: String,
-        ip: Ipv4Addr,
+    async fn tcp_ping(
+        target: String,
         timeout: time::Duration,
         interval: time::Duration,
         mut exit_signal_rx: broadcast::Receiver<()>,
         result_tx: Sender<Result>,
         exited_tx: Sender<()>,
     ) {
-        let dst = SocketAddrV4::new(ip, 0).into();
-        let mut seq = Wrapping(0_u16);
-        let sock = PingSocket::new(&Domain::V4);
-        let sock = match sock {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Get socket fail! {}", e);
-                std::process::exit(1);
-            }
-        };
         loop {
-            let sock = &sock;
             time::sleep(interval).await;
-            seq += Wrapping(1);
-            if seq == Wrapping(0) {
-                seq += Wrapping(1);
-            }
-            match sock.send_request(seq.0, PING_PACKET_LEN, &dst).await {
-                Ok(_) => (),
-                Err(e) => {
-                    error!("Socket send fail! {}", e);
-                    exited_tx.send(()).await.unwrap_or_else(|err| {
-                        error!("Exited tx send fail, {}", err);
-                        std::process::exit(1)
-                    });
-                    return;
-                }
-            };
 
+            let conn = TcpStream::connect(target.clone());
             let send_at = time::Instant::now();
             let utc_send_at = chrono::Utc::now();
-            let result = time::timeout(timeout, sock.recv_reply(seq.0, PING_PACKET_LEN)).await;
-            let address = address.clone();
-            let result = match result {
-                Ok(_) => PingResult {
-                    address,
+            let result = time::timeout(timeout, conn).await;
+            let result = match result  {
+                Ok(_) => TcpPingResult {
+                    target: target.clone(),
                     is_timeout: false,
                     send_at: utc_send_at,
-                    rtt: Some(send_at.elapsed()),
+                    rtt: Some(send_at.elapsed())
                 },
-                Err(_) => PingResult {
-                    address,
+                Err(_) => TcpPingResult {
+                    target: target.clone(),
                     is_timeout: true,
                     send_at: utc_send_at,
-                    rtt: None,
-                },
+                    rtt: None
+                }
             };
-            let result = Result::PingResult(result);
+            let result = Result::TcpPingResult(result);
+
             result_tx.send(result).await.unwrap_or_else(|err| {
-                error!("Exited tx send fail, {}", err);
-                std::process::exit(1)
+                error!("Send tcp ping result fail, {}", err);
+                std::process::exit(1);
             });
 
             match exit_signal_rx.try_recv() {
@@ -110,11 +83,8 @@ impl PingDetector {
         }
     }
 
-    pub async fn start_loop(
-        mut self,
-        mut command_rx: Receiver<Vec<PingCommand>>,
-        result_tx: Sender<Result>,
-    ) {
+    pub(crate) async fn start_loop(mut self, mut command_rx: Receiver<Vec<TcpPingCommand>>,
+                                   result_tx: Sender<Result>) {
         let mut first_loop = true;
         let mut total = 0;
         loop {
@@ -134,7 +104,7 @@ impl PingDetector {
                 first_loop = false;
             } else {
                 info!(
-                    "Command change start to stop all ping tasks. total {}",
+                    "Command change start to stop all tcp ping tasks. total {}",
                     total
                 );
                 if let Err(e) = self.exit_signal_tx.send(()) {
@@ -164,24 +134,17 @@ impl PingDetector {
             let mut smooth_task_ticker = time::interval(smooth_task_time);
             for command in &commands {
                 smooth_task_ticker.tick().await;
-                let timeout = command.timeout;
-                let interval = command.interval;
-                match command.ip {
-                    IpAddr::V4(ip) => {
-                        tokio::task::spawn(Self::ping_v4(
-                            command.address.clone(),
-                            ip,
-                            timeout,
-                            interval,
-                            self.exit_signal_tx.subscribe(),
-                            result_tx.clone(),
-                            self.exited_tx.clone(),
-                        ));
-                    }
-                    IpAddr::V6(_) => unimplemented!(),
-                }
+                tokio::task::spawn(Self::tcp_ping(
+                    command.target.clone(),
+                    command.timeout,
+                    command.interval,
+                    self.exit_signal_tx.subscribe(),
+                    result_tx.clone(),
+                    self.exited_tx.clone(),
+                ));
             }
             info!("All ping tasks was started, total {}", total)
         }
     }
 }
+

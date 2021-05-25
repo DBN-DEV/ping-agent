@@ -15,3 +15,21 @@ pub struct PingResult {
     pub send_at: chrono::DateTime<Utc>,
     pub rtt: Option<time::Duration>,
 }
+
+pub struct TcpPingCommand {
+    pub target: String,
+    pub interval: time::Duration,
+    pub timeout: time::Duration,
+}
+
+pub struct TcpPingResult {
+    pub target: String,
+    pub is_timeout: bool,
+    pub send_at: chrono::DateTime<Utc>,
+    pub rtt: Option<time::Duration>,
+}
+
+pub enum Result {
+    PingResult(PingResult),
+    TcpPingResult(TcpPingResult)
+}

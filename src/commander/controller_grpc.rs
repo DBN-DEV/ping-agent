@@ -8,9 +8,20 @@ pub struct PingCommand {
     pub interval_ms: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PingCommandsResponse {
+pub struct TcpPingCommand {
+    #[prost(string, tag = "1")]
+    pub target: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub timeout_ms: u32,
+    #[prost(uint32, tag = "3")]
+    pub interval_ms: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CommandsResponse {
     #[prost(message, repeated, tag = "1")]
-    pub commands: ::prost::alloc::vec::Vec<PingCommand>,
+    pub ping_commands: ::prost::alloc::vec::Vec<PingCommand>,
+    #[prost(message, repeated, tag = "2")]
+    pub tcp_ping_commands: ::prost::alloc::vec::Vec<TcpPingCommand>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CommandRequest {
@@ -74,7 +85,7 @@ pub mod controller_client {
         pub async fn get_ping_command(
             &mut self,
             request: impl tonic::IntoRequest<super::CommandRequest>,
-        ) -> Result<tonic::Response<super::PingCommandsResponse>, tonic::Status> {
+        ) -> Result<tonic::Response<super::CommandsResponse>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
                     tonic::Code::Unknown,
