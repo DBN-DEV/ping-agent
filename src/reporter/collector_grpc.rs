@@ -23,21 +23,14 @@ pub struct TcpPingResult {
     pub send_at: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BatchReportRequest {
-    #[prost(message, repeated, tag = "1")]
-    pub results: ::prost::alloc::vec::Vec<PingResult>,
-    #[prost(uint32, tag = "2")]
-    pub agent_id: u32,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SingleReportRequest {
+pub struct PingReportRequest {
     #[prost(message, optional, tag = "1")]
     pub result: ::core::option::Option<PingResult>,
     #[prost(uint32, tag = "2")]
     pub agent_id: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SingleTcpPingReportRequest {
+pub struct TcpPingReportRequest {
     #[prost(message, optional, tag = "1")]
     pub result: ::core::option::Option<TcpPingResult>,
     #[prost(uint32, tag = "2")]
@@ -76,9 +69,23 @@ pub mod collector_client {
             let inner = tonic::client::Grpc::with_interceptor(inner, interceptor);
             Self { inner }
         }
-        pub async fn ping_batch_report(
+        pub async fn ping_report(
             &mut self,
-            request: impl tonic::IntoRequest<super::BatchReportRequest>,
+            request: impl tonic::IntoRequest<super::PingReportRequest>,
+        ) -> Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/collector_grpc.Collector/PingReport");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn tcp_ping_report(
+            &mut self,
+            request: impl tonic::IntoRequest<super::TcpPingReportRequest>,
         ) -> Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
@@ -88,38 +95,7 @@ pub mod collector_client {
             })?;
             let codec = tonic::codec::ProstCodec::default();
             let path =
-                http::uri::PathAndQuery::from_static("/collector_grpc.Collector/PingBatchReport");
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn ping_single_report(
-            &mut self,
-            request: impl tonic::IntoRequest<super::SingleReportRequest>,
-        ) -> Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/collector_grpc.Collector/PingSingleReport");
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn tcp_ping_single_report(
-            &mut self,
-            request: impl tonic::IntoRequest<super::SingleTcpPingReportRequest>,
-        ) -> Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/collector_grpc.Collector/TcpPingSingleReport",
-            );
+                http::uri::PathAndQuery::from_static("/collector_grpc.Collector/TcpPingReport");
             self.inner.unary(request.into_request(), path, codec).await
         }
     }

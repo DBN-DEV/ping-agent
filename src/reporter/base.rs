@@ -1,7 +1,7 @@
 use crate::reporter::collector_grpc::collector_client::CollectorClient;
 use crate::reporter::collector_grpc::PingResult as GrpcPingResult;
 use crate::reporter::collector_grpc::TcpPingResult as GrpcTcpPingResult;
-use crate::reporter::collector_grpc::{SingleReportRequest, SingleTcpPingReportRequest};
+use crate::reporter::collector_grpc::{PingReportRequest, TcpPingReportRequest};
 use crate::util::{PingResult, Result, TcpPingResult};
 use rand::{Rng, SeedableRng};
 use std::time;
@@ -24,7 +24,7 @@ impl Reporter {
         }
     }
 
-    fn build_ping_request(&self, result: PingResult) -> SingleReportRequest {
+    fn build_ping_request(&self, result: PingResult) -> PingReportRequest {
         let mut rtt_sec = 0_f32;
         if let Some(rtt) = result.rtt {
             rtt_sec = rtt.as_secs_f32();
@@ -36,13 +36,13 @@ impl Reporter {
             time: result.send_at.format("%Y-%m-%d %H:%M:%S").to_string(),
         };
 
-        SingleReportRequest {
+        PingReportRequest {
             agent_id: self.agent_id,
             result: Some(grpc_result),
         }
     }
 
-    fn build_tcp_ping_request(&self, result: TcpPingResult) -> SingleTcpPingReportRequest {
+    fn build_tcp_ping_request(&self, result: TcpPingResult) -> TcpPingReportRequest {
         let mut rtt_sec = 0_f32;
         if let Some(rtt) = result.rtt {
             rtt_sec = rtt.as_secs_f32();
@@ -55,7 +55,7 @@ impl Reporter {
             send_at: result.send_at.format("%Y-%m-%d %H:%M:%S").to_string(),
         };
 
-        SingleTcpPingReportRequest {
+        TcpPingReportRequest {
             agent_id: self.agent_id,
             result: Some(result),
         }
@@ -93,18 +93,24 @@ impl Reporter {
                 match result {
                     Result::PingResult(r) => {
                         let request = self.build_ping_request(r);
-                        let result = inner_client.ping_single_report(request).await;
+                        let result = inner_client.ping_report(request).await;
                         match result {
                             Ok(_) => continue,
-                            Err(_) => client = None,
+                            Err(e) => {
+                                warn!("Send ping result fail, {:?}", e);
+                                client = None
+                            }
                         }
                     }
                     Result::TcpPingResult(r) => {
                         let request = self.build_tcp_ping_request(r);
-                        let result = inner_client.tcp_ping_single_report(request).await;
+                        let result = inner_client.tcp_ping_report(request).await;
                         match result {
                             Ok(_) => continue,
-                            Err(_) => client = None,
+                            Err(e) => {
+                                warn!("Send tcp ping result fail, {:?}", e);
+                                client = None
+                            }
                         }
                     }
                 }

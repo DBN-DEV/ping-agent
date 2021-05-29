@@ -31,5 +31,5 @@ pub struct TcpPingResult {
 
 pub enum Result {
     PingResult(PingResult),
-    TcpPingResult(TcpPingResult)
+    TcpPingResult(TcpPingResult),
 }

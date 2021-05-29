@@ -19,24 +19,18 @@ message TcpPingResult {
   string sendAt = 4;
 }
 
-message BatchReportRequest {
-  repeated PingResult results = 1;
-  uint32 agentId = 2;
-}
 
-message SingleReportRequest {
+message PingReportRequest {
   PingResult result = 1;
   uint32 agentId = 2;
 }
 
-message SingleTcpPingReportRequest {
+message TcpPingReportRequest {
   TcpPingResult result = 1;
   uint32 agentId = 2;
 }
 
 service Collector {
-  rpc PingBatchReport (BatchReportRequest) returns (Empty);
-  rpc PingSingleReport (SingleReportRequest) returns (Empty);
-
-  rpc TcpPingSingleReport (SingleTcpPingReportRequest) returns (Empty);
+  rpc PingReport (PingReportRequest) returns (Empty);
+  rpc TcpPingReport (TcpPingReportRequest) returns (Empty);
 }

@@ -1,13 +1,12 @@
-use tokio::time;
+use crate::util::{Result, TcpPingCommand, TcpPingResult};
 use tokio::net::TcpStream;
 use tokio::sync::broadcast;
-use tokio::sync::mpsc::{Sender, Receiver, channel};
-use crate::util::{TcpPingResult, TcpPingCommand, Result};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::time;
 
 use tracing::{error, info};
 
 const SMOOTH_MICROS: u64 = 1_000_000;
-
 
 pub struct TcpPingDetector {
     exited_tx: Sender<()>,
@@ -41,19 +40,19 @@ impl TcpPingDetector {
             let send_at = time::Instant::now();
             let utc_send_at = chrono::Utc::now();
             let result = time::timeout(timeout, conn).await;
-            let result = match result  {
+            let result = match result {
                 Ok(_) => TcpPingResult {
                     target: target.clone(),
                     is_timeout: false,
                     send_at: utc_send_at,
-                    rtt: Some(send_at.elapsed())
+                    rtt: Some(send_at.elapsed()),
                 },
                 Err(_) => TcpPingResult {
                     target: target.clone(),
                     is_timeout: true,
                     send_at: utc_send_at,
-                    rtt: None
-                }
+                    rtt: None,
+                },
             };
             let result = Result::TcpPingResult(result);
 
@@ -83,8 +82,11 @@ impl TcpPingDetector {
         }
     }
 
-    pub(crate) async fn start_loop(mut self, mut command_rx: Receiver<Vec<TcpPingCommand>>,
-                                   result_tx: Sender<Result>) {
+    pub(crate) async fn start_loop(
+        mut self,
+        mut command_rx: Receiver<Vec<TcpPingCommand>>,
+        result_tx: Sender<Result>,
+    ) {
         let mut first_loop = true;
         let mut total = 0;
         loop {
@@ -147,4 +149,3 @@ impl TcpPingDetector {
         }
     }
 }
-
