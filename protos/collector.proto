@@ -5,14 +5,14 @@ package collector_grpc;
 
 message Empty {}
 
-message PingResult {
+message GrpcPingResult {
   string ip = 1;
   bool isTimeout = 2;
   float rtt = 3;
   string time = 4;
 }
 
-message TcpPingResult {
+message GrpcTcpPingResult {
   string target = 1;
   bool isTimeout = 2;
   float rtt = 3;
@@ -21,12 +21,12 @@ message TcpPingResult {
 
 
 message PingReportRequest {
-  PingResult result = 1;
+  GrpcPingResult result = 1;
   uint32 agentId = 2;
 }
 
 message TcpPingReportRequest {
-  TcpPingResult result = 1;
+  GrpcTcpPingResult result = 1;
   uint32 agentId = 2;
 }
 

@@ -1,69 +1,47 @@
-use crate::reporter::collector_grpc::collector_client::CollectorClient;
-use crate::reporter::collector_grpc::PingResult as GrpcPingResult;
-use crate::reporter::collector_grpc::TcpPingResult as GrpcTcpPingResult;
-use crate::reporter::collector_grpc::{PingReportRequest, TcpPingReportRequest};
-use crate::util::{PingResult, Result, TcpPingResult};
+use crate::grpc::collector_grpc::collector_client::CollectorClient;
+use crate::grpc::collector_grpc::{PingReportRequest, TcpPingReportRequest};
+use crate::structures::{DetectionResult, PingResult, TcpPingResult};
 use rand::{Rng, SeedableRng};
 use std::time;
 use tokio::sync::mpsc::Receiver;
-use tonic::transport::Channel;
 use tracing::{error, info, warn};
+
+type Client = CollectorClient<tonic::transport::Channel>;
 
 const BASE_CONNECT_RETRY_INTERVAL: u64 = 10;
 
 pub struct Reporter {
-    server_addr: String,
+    server_add: String,
     agent_id: u32,
 }
 
 impl Reporter {
-    pub fn new(server_addr: String, agent_id: u32) -> Self {
+    pub fn new(server_add: String, agent_id: u32) -> Self {
         Self {
-            server_addr,
+            server_add,
             agent_id,
         }
     }
 
     fn build_ping_request(&self, result: PingResult) -> PingReportRequest {
-        let mut rtt_sec = 0_f32;
-        if let Some(rtt) = result.rtt {
-            rtt_sec = rtt.as_secs_f32();
-        }
-        let grpc_result = GrpcPingResult {
-            ip: result.address,
-            is_timeout: result.is_timeout,
-            rtt: rtt_sec,
-            time: result.send_at.format("%Y-%m-%d %H:%M:%S").to_string(),
-        };
-
+        let result = result.into();
         PingReportRequest {
             agent_id: self.agent_id,
-            result: Some(grpc_result),
+            result: Some(result),
         }
     }
 
     fn build_tcp_ping_request(&self, result: TcpPingResult) -> TcpPingReportRequest {
-        let mut rtt_sec = 0_f32;
-        if let Some(rtt) = result.rtt {
-            rtt_sec = rtt.as_secs_f32();
-        }
-
-        let result = GrpcTcpPingResult {
-            target: result.target,
-            is_timeout: result.is_timeout,
-            rtt: rtt_sec,
-            send_at: result.send_at.format("%Y-%m-%d %H:%M:%S").to_string(),
-        };
-
+        let result = result.into();
         TcpPingReportRequest {
             agent_id: self.agent_id,
             result: Some(result),
         }
     }
 
-    async fn keep_trying_connect_to_server(server_addr: &str) -> CollectorClient<Channel> {
+    async fn connect(server_add: &str) -> Client {
         loop {
-            let client = CollectorClient::connect(String::from(server_addr)).await;
+            let client = CollectorClient::connect(String::from(server_add)).await;
             if let Ok(c) = client {
                 info!("Connect to collector success.");
                 return c;
@@ -77,8 +55,8 @@ impl Reporter {
         }
     }
 
-    pub async fn start_loop(&self, mut ping_result_rx: Receiver<Result>) {
-        let mut client: Option<CollectorClient<Channel>> = None;
+    pub async fn start_loop(&self, mut ping_result_rx: Receiver<DetectionResult>) {
+        let mut client: Option<Client> = None;
         loop {
             let result = ping_result_rx.recv().await;
             let result = if let Some(r) = result {
@@ -91,31 +69,29 @@ impl Reporter {
 
             if let Some(ref mut inner_client) = client {
                 match result {
-                    Result::PingResult(r) => {
+                    DetectionResult::PingResult(r) => {
                         let request = self.build_ping_request(r);
                         let result = inner_client.ping_report(request).await;
-                        match result {
-                            Ok(_) => continue,
-                            Err(e) => {
-                                warn!("Send ping result fail, {:?}", e);
-                                client = None
-                            }
+                        if let Err(e) = result {
+                            warn!("Send ping result fail, {:?}", e);
+                            client = None
+                        } else {
+                            continue;
                         }
                     }
-                    Result::TcpPingResult(r) => {
+                    DetectionResult::TcpPingResult(r) => {
                         let request = self.build_tcp_ping_request(r);
                         let result = inner_client.tcp_ping_report(request).await;
-                        match result {
-                            Ok(_) => continue,
-                            Err(e) => {
-                                warn!("Send tcp ping result fail, {:?}", e);
-                                client = None
-                            }
+                        if let Err(e) = result {
+                            warn!("Send tcp ping result fail, {:?}", e);
+                            client = None
+                        } else {
+                            continue;
                         }
                     }
                 }
             } else {
-                client = Some(Self::keep_trying_connect_to_server(&self.server_addr).await);
+                client = Some(Self::connect(&self.server_add).await);
             };
         }
     }

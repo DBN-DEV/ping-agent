@@ -4,21 +4,21 @@ option go_package = ".;grpc";
 package controller_grpc;
 
 
-message PingCommand {
+message GrpcPingCommand {
   string ip = 1;
   uint32 timeoutMs = 2;
   uint32 intervalMs = 3;
 }
 
-message TcpPingCommand {
+message GrpcTcpPingCommand {
   string target = 1;
   uint32 timeoutMs = 2;
   uint32 intervalMs = 3;
 }
 
 message CommandsResponse {
-  repeated PingCommand pingCommands = 1;
-  repeated TcpPingCommand tcpPingCommands = 2;
+  repeated GrpcPingCommand pingCommands = 1;
+  repeated GrpcTcpPingCommand tcpPingCommands = 2;
 }
 
 message CommandRequest {

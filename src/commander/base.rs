@@ -1,9 +1,8 @@
-use super::controller_grpc::controller_client::ControllerClient;
-use super::controller_grpc::CommandRequest;
-use crate::commander::controller_grpc::{CommandCheckSumResponse, CommandsResponse};
-use crate::util::{PingCommand, TcpPingCommand};
+use crate::grpc::controller_grpc::controller_client::ControllerClient;
+use crate::grpc::controller_grpc::{CommandCheckSumResponse, CommandRequest, CommandsResponse};
+use crate::structures::{PingCommand, TcpPingCommand};
 use rand::{Rng, SeedableRng};
-use std::net::IpAddr;
+use std::convert::TryFrom;
 use std::process;
 use std::result::Result::Err;
 use tokio::sync::mpsc::Sender;
@@ -19,23 +18,23 @@ type Result<T> = std::result::Result<T, tonic::Status>;
 pub struct Commander {
     polling_update_interval: time::Duration,
     agent_id: u32,
-    controller_addr: String,
+    controller_add: String,
 }
 
 impl Commander {
     pub async fn new(
-        controller_addr: String,
+        controller_add: String,
         agent_id: u32,
         polling_update_interval: time::Duration,
     ) -> Self {
         Self {
-            controller_addr,
+            controller_add,
             agent_id,
             polling_update_interval,
         }
     }
 
-    async fn keep_trying_connect_to_controller(controller_addr: String) -> Client {
+    async fn connect(controller_add: String) -> Client {
         let mut first_loop = true;
         loop {
             if first_loop {
@@ -48,7 +47,7 @@ impl Commander {
                 warn!("Wail {}s retry to connect to controller.", wait_sec);
                 time::sleep(wait).await;
             }
-            let client = ControllerClient::connect(controller_addr.clone()).await;
+            let client = ControllerClient::connect(controller_add.clone()).await;
             if let Ok(client) = client {
                 info!("Connect to controller success.");
                 return client;
@@ -64,14 +63,12 @@ impl Commander {
         tcp_ping_command_tx: Sender<Vec<TcpPingCommand>>,
     ) {
         let mut now_check_sum = String::new();
-        let mut client =
-            Self::keep_trying_connect_to_controller(self.controller_addr.clone()).await;
+        let mut client = Self::connect(self.controller_add.clone()).await;
         let mut loss_connect = false;
         loop {
             time::sleep(self.polling_update_interval).await;
             if loss_connect {
-                client =
-                    Self::keep_trying_connect_to_controller(self.controller_addr.clone()).await;
+                client = Self::connect(self.controller_add.clone()).await;
                 loss_connect = false;
             }
 
@@ -142,41 +139,23 @@ impl Commander {
     ) {
         let mut ping_commands = Vec::with_capacity(commands_resp.ping_commands.len());
         for command in commands_resp.ping_commands {
-            let ip = command.ip.parse::<IpAddr>();
-            let ip = if let Ok(ip) = ip {
-                ip
+            let ip = command.ip.clone();
+            let ping_command = PingCommand::try_from(command);
+            if let Ok(ping_command) = ping_command {
+                ping_commands.push(ping_command);
             } else {
-                warn!("parse ip:{} fail", command.ip);
-                continue;
-            };
-            let timeout = time::Duration::from_millis(u64::from(command.timeout_ms));
-            let interval = time::Duration::from_millis(u64::from(command.timeout_ms));
-            let ping_command = PingCommand {
-                ip,
-                address: command.ip,
-                interval,
-                timeout,
-            };
-            ping_commands.push(ping_command)
+                warn!("Parse ip:{} error, jump this add.", ip);
+            }
         }
         let r = ping_command_tx.send(ping_commands).await;
-        match r {
-            Ok(_) => (),
-            Err(e) => {
-                error!("Send ping_commands to ping detector fail!, {}", e);
-                process::exit(1);
-            }
+        if let Err(e) = r {
+            error!("Send ping_commands to ping detector fail!, {}", e);
+            process::abort();
         }
 
         let mut tcp_ping_commands = Vec::with_capacity(commands_resp.tcp_ping_commands.len());
         for command in commands_resp.tcp_ping_commands {
-            let timeout = time::Duration::from_millis(u64::from(command.timeout_ms));
-            let interval = time::Duration::from_millis(u64::from(command.interval_ms));
-            let tcp_ping_command = TcpPingCommand {
-                target: command.target,
-                timeout,
-                interval,
-            };
+            let tcp_ping_command = TcpPingCommand::from(command);
             tcp_ping_commands.push(tcp_ping_command);
         }
         let r = tcp_ping_command_tx.send(tcp_ping_commands).await;

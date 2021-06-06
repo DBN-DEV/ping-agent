@@ -1,5 +1,5 @@
 use super::ping_socket::{Domain, PingSocket};
-use crate::util::{PingCommand, PingResult, Result};
+use crate::structures::{DetectionResult, PingCommand, PingResult};
 use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
 use std::num::Wrapping;
 use tokio::sync::broadcast;
@@ -33,7 +33,7 @@ impl PingDetector {
         timeout: time::Duration,
         interval: time::Duration,
         mut exit_signal_rx: broadcast::Receiver<()>,
-        result_tx: Sender<Result>,
+        result_tx: Sender<DetectionResult>,
         exited_tx: Sender<()>,
     ) {
         let dst = SocketAddrV4::new(ip, 0).into();
@@ -83,7 +83,7 @@ impl PingDetector {
                     rtt: None,
                 },
             };
-            let result = Result::PingResult(result);
+            let result = DetectionResult::PingResult(result);
             result_tx.send(result).await.unwrap_or_else(|err| {
                 error!("Exited tx send fail, {}", err);
                 std::process::exit(1)
@@ -113,7 +113,7 @@ impl PingDetector {
     pub async fn start_loop(
         mut self,
         mut command_rx: Receiver<Vec<PingCommand>>,
-        result_tx: Sender<Result>,
+        result_tx: Sender<DetectionResult>,
     ) {
         let mut first_loop = true;
         let mut total = 0;

@@ -1,3 +1,4 @@
 /target
 .idea
 .DS_Store
+/src/grpc/*_grpc.rs

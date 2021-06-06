@@ -1,7 +1,8 @@
 mod commander;
 mod detectors;
+mod grpc;
 mod reporter;
-mod util;
+mod structures;
 
 use std::env;
 

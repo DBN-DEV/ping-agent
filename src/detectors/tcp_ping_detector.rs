@@ -1,4 +1,4 @@
-use crate::util::{Result, TcpPingCommand, TcpPingResult};
+use crate::structures::{DetectionResult, TcpPingCommand, TcpPingResult};
 use tokio::net::TcpStream;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -30,7 +30,7 @@ impl TcpPingDetector {
         timeout: time::Duration,
         interval: time::Duration,
         mut exit_signal_rx: broadcast::Receiver<()>,
-        result_tx: Sender<Result>,
+        result_tx: Sender<DetectionResult>,
         exited_tx: Sender<()>,
     ) {
         loop {
@@ -54,7 +54,7 @@ impl TcpPingDetector {
                     rtt: None,
                 },
             };
-            let result = Result::TcpPingResult(result);
+            let result = DetectionResult::TcpPingResult(result);
 
             result_tx.send(result).await.unwrap_or_else(|err| {
                 error!("Send tcp ping result fail, {}", err);
@@ -85,7 +85,7 @@ impl TcpPingDetector {
     pub(crate) async fn start_loop(
         mut self,
         mut command_rx: Receiver<Vec<TcpPingCommand>>,
-        result_tx: Sender<Result>,
+        result_tx: Sender<DetectionResult>,
     ) {
         let mut first_loop = true;
         let mut total = 0;
