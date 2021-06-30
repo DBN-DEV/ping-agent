@@ -115,7 +115,6 @@ impl PingDetector {
         mut command_rx: Receiver<Vec<PingCommand>>,
         result_tx: Sender<DetectionResult>,
     ) {
-        let mut first_loop = true;
         let mut total = 0;
         loop {
             let commands = match command_rx.recv().await {
@@ -125,13 +124,9 @@ impl PingDetector {
                 }
                 Some(c) => c,
             };
-            if commands.is_empty() {
-                info!("Command is empty, have noting to do");
-                continue;
-            }
 
-            if first_loop {
-                first_loop = false;
+            if total == 0{
+                info!("No task need to stop");
             } else {
                 info!(
                     "Command change start to stop all ping tasks. total {}",
@@ -155,6 +150,11 @@ impl PingDetector {
                         std::process::exit(1);
                     }
                 }
+            }
+
+            if commands.is_empty() {
+                info!("Command is empty, have noting to do");
+                continue;
             }
 
             total = commands.len();
