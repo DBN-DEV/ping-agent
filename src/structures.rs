@@ -47,7 +47,7 @@ impl Into<GrpcPingResult> for PingResult {
             ip: self.address,
             is_timeout: self.is_timeout,
             rtt: rtt_sec,
-            time: self.send_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            time: self.send_at.timestamp(),
         }
     }
 }
@@ -85,7 +85,7 @@ impl Into<GrpcTcpPingResult> for TcpPingResult {
             target: self.target,
             is_timeout: self.is_timeout,
             rtt: rtt_sec,
-            send_at: self.send_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            send_at: self.send_at.timestamp(),
         }
     }
 }

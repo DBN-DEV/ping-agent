@@ -9,14 +9,14 @@ message GrpcPingResult {
   string ip = 1;
   bool isTimeout = 2;
   float rtt = 3;
-  string time = 4;
+  int64 time = 4;
 }
 
 message GrpcTcpPingResult {
   string target = 1;
   bool isTimeout = 2;
   float rtt = 3;
-  string sendAt = 4;
+  int64 sendAt = 4;
 }
 
 
