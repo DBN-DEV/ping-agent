@@ -4,6 +4,7 @@ use tokio::sync::broadcast;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time;
 
+use tokio::time::MissedTickBehavior;
 use tracing::{error, info};
 
 const SMOOTH_MICROS: u64 = 1_000_000;
@@ -33,8 +34,10 @@ impl TcpPingDetector {
         result_tx: Sender<DetectionResult>,
         exited_tx: Sender<()>,
     ) {
+        let mut interval = time::interval(interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
-            time::sleep(interval).await;
+            interval.tick().await;
 
             let conn = TcpStream::connect(target.clone());
             let send_at = time::Instant::now();

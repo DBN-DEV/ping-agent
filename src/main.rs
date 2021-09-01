@@ -4,11 +4,11 @@ mod grpc;
 mod reporter;
 mod structures;
 
-use std::env;
-use futures::future;
 use commander::Commander;
 use detectors::{PingDetector, TcpPingDetector};
+use futures::future;
 use reporter::Reporter;
+use std::env;
 use std::time;
 use tokio::sync::mpsc::channel;
 
@@ -28,7 +28,7 @@ async fn main() {
     let (tcp_ping_command_tx, tcp_ping_command_rx) = channel(10);
     let (ping_result_tx, ping_result_rx) = channel(1024);
 
-    let commander = Commander::new(controller_addr, agent_id, COMMAND_POLL_INTERVAL).await;
+    let commander = Commander::new(controller_addr, agent_id, COMMAND_POLL_INTERVAL);
     let ping_detector = PingDetector::new();
     let tcp_ping_detector = TcpPingDetector::new();
     let reporter = Reporter::new(reporter_addr, agent_id);

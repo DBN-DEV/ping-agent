@@ -7,6 +7,7 @@ use std::process;
 use std::result::Result::Err;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
+use tokio::time::MissedTickBehavior;
 use tracing::{debug, error, info, warn};
 
 const BASE_CONNECT_TO_CONTROLLER_RETRY_INTERVAL: u64 = 10;
@@ -22,7 +23,7 @@ pub struct Commander {
 }
 
 impl Commander {
-    pub async fn new(
+    pub fn new(
         controller_add: String,
         agent_id: u32,
         polling_update_interval: time::Duration,
@@ -65,8 +66,10 @@ impl Commander {
         let mut now_check_sum = String::new();
         let mut client = Self::connect(self.controller_add.clone()).await;
         let mut loss_connect = false;
+        let mut interval = time::interval(self.polling_update_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
-            time::sleep(self.polling_update_interval).await;
+            interval.tick().await;
             if loss_connect {
                 client = Self::connect(self.controller_add.clone()).await;
                 loss_connect = false;
@@ -76,7 +79,7 @@ impl Commander {
                 "Start to poll command update, now check sum {}",
                 now_check_sum
             );
-            let check_sum_response = Self::get_command_check_sum(&mut client, self.agent_id).await;
+            let check_sum_response = Self::pull_command_check_sum(&mut client, self.agent_id).await;
             let check_sum = match check_sum_response {
                 Err(_) => {
                     warn!("Get command check sum fail.");
@@ -95,7 +98,7 @@ impl Commander {
             now_check_sum = check_sum.check_sum;
 
             info!("Start to get ping commands.");
-            let commands_resp = Self::get_ping_commands(&mut client, self.agent_id).await;
+            let commands_resp = Self::pull_ping_commands(&mut client, self.agent_id).await;
             let commands = match commands_resp {
                 Err(_) => {
                     warn!("Get command fail, wait next poll.");
@@ -117,7 +120,7 @@ impl Commander {
         }
     }
 
-    async fn get_command_check_sum(
+    async fn pull_command_check_sum(
         client: &mut Client,
         agent_id: u32,
     ) -> Result<CommandCheckSumResponse> {
@@ -126,7 +129,7 @@ impl Commander {
         Ok(command_check_sum_response.into_inner())
     }
 
-    async fn get_ping_commands(client: &mut Client, agent_id: u32) -> Result<CommandsResponse> {
+    async fn pull_ping_commands(client: &mut Client, agent_id: u32) -> Result<CommandsResponse> {
         let request = CommandRequest { agent_id };
         let ping_command_from_controller = client.get_ping_command(request).await?;
         Ok(ping_command_from_controller.into_inner())

@@ -5,6 +5,7 @@ use std::num::Wrapping;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time;
+use tokio::time::MissedTickBehavior;
 use tracing::{error, info};
 
 const SMOOTH_MICROS: u64 = 1_000_000;
@@ -46,23 +47,23 @@ impl PingDetector {
                 std::process::exit(1);
             }
         };
+        let mut interval = time::interval(interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
+            interval.tick().await;
+
             let sock = &sock;
-            time::sleep(interval).await;
             seq += Wrapping(1);
             if seq == Wrapping(0) {
                 seq += Wrapping(1);
             }
-            match sock.send_request(seq.0, PING_PACKET_LEN, &dst).await {
-                Ok(_) => (),
-                Err(e) => {
-                    error!("Socket send fail! {}", e);
-                    exited_tx.send(()).await.unwrap_or_else(|err| {
-                        error!("Exited tx send fail, {}", err);
-                        std::process::exit(1)
-                    });
-                    return;
-                }
+            if let Err(e) = sock.send_request(seq.0, PING_PACKET_LEN, &dst).await {
+                error!("Socket send fail! {}", e);
+                exited_tx.send(()).await.unwrap_or_else(|err| {
+                    error!("Exited tx send fail, {}", err);
+                    std::process::abort();
+                });
+                return;
             };
 
             let send_at = time::Instant::now();
@@ -125,7 +126,7 @@ impl PingDetector {
                 Some(c) => c,
             };
 
-            if total == 0{
+            if total == 0 {
                 info!("No task need to stop");
             } else {
                 info!(
