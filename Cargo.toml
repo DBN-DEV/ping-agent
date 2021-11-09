@@ -1,8 +1,8 @@
 [package]
 name = "ping-agent"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["cal.huang <huanghaoyuanhhy@gmail.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 build = "build.rs"
 
@@ -11,19 +11,19 @@ lto = "fat"
 codegen-units = 1
 
 [dependencies]
-socket2 = "0.3"
+socket2 = "0.4"
 futures = "0.3"
 rand = { version = "0.8", features = ["small_rng"] }
 bytes = "1"
 chrono = "0.4"
 anyhow = "1"
-tonic = "0.4"
-prost = "0.7"
+tonic = "0.6"
+prost = "0.9"
 tracing = "0.1"
 tracing-futures = "0.2"
 tracing-attributes = "0.1"
-tracing-subscriber = "0.2"
+tracing-subscriber = "0.3"
 tokio = { version = "1", features = ["full"] }
 
 [build-dependencies]
-tonic-build = "0.4"
+tonic-build = "0.6"
