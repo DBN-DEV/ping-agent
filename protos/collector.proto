@@ -6,31 +6,56 @@ package collector_grpc;
 message Empty {}
 
 message GrpcPingResult {
-  string ip = 1;
-  bool isTimeout = 2;
-  float rtt = 3;
-  int64 time = 4;
+  string IP = 1;
+  bool IsTimeout = 2;
+  uint32 RttMicros = 3;
+  int64 UTCSendAt = 4;
+}
+
+message PingReportRequest {
+  GrpcPingResult Result = 1;
+  uint32 AgentID = 2;
 }
 
 message GrpcTcpPingResult {
-  string target = 1;
-  bool isTimeout = 2;
-  float rtt = 3;
-  int64 sendAt = 4;
-}
-
-
-message PingReportRequest {
-  GrpcPingResult result = 1;
-  uint32 agentId = 2;
+  string Target = 1;
+  bool IsTimeout = 2;
+  uint32 RttMicros = 3;
+  int64 UTCSendAt = 4;
 }
 
 message TcpPingReportRequest {
-  GrpcTcpPingResult result = 1;
-  uint32 agentId = 2;
+  GrpcTcpPingResult Result = 1;
+  uint32 AgentID = 2;
+}
+
+message GrpcFPingResult {
+  string IP = 1;
+  bool IsTimeout = 2;
+  uint32 RttMicros = 3;
+}
+
+message FPingReportRequest {
+  repeated GrpcFPingResult Results = 1;
+  uint32 AgentID = 2;
+  string Version = 3;
+}
+
+message GrpcMTRResult {
+  uint32 Hop = 1;
+  string IP = 2;
+  uint32 RttMicros = 3;
+}
+
+message MTRReportRequest {
+  repeated GrpcMTRResult Results = 1;
+  uint32 AgentID = 2;
+  string Version = 3;
 }
 
 service Collector {
-  rpc PingReport (PingReportRequest) returns (Empty);
-  rpc TcpPingReport (TcpPingReportRequest) returns (Empty);
+  rpc HeartbeatReport (stream Empty) returns (Empty);
+  rpc PingReport (stream PingReportRequest) returns (Empty);
+  rpc TcpPingReport (stream TcpPingReportRequest) returns (Empty);
+  rpc FpingReport (stream FPingReportRequest) returns (Empty);
 }
