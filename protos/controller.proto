@@ -3,33 +3,49 @@ syntax = "proto3";
 option go_package = ".;grpc";
 package controller_grpc;
 
+message CommandRequest {
+  uint32 AgentID = 1;
+  string Version = 2;
+}
 
 message GrpcPingCommand {
-  string ip = 1;
-  uint32 timeoutMs = 2;
-  uint32 intervalMs = 3;
+  string IP = 1;
+  uint32 TimeoutMS = 2;
+  uint32 IntervalMS = 3;
+}
+
+message PingCommandsResponse {
+  string Version = 1;
+  repeated GrpcPingCommand PingCommands = 2;
 }
 
 message GrpcTcpPingCommand {
-  string target = 1;
-  uint32 timeoutMs = 2;
-  uint32 intervalMs = 3;
+  string Target = 1;
+  uint32 TimeoutMS = 2;
+  uint32 IntervalMS = 3;
 }
 
-message CommandsResponse {
-  repeated GrpcPingCommand pingCommands = 1;
-  repeated GrpcTcpPingCommand tcpPingCommands = 2;
+message TcpPingCommandResponse {
+  string Version = 1;
+  repeated GrpcTcpPingCommand TcpPingCommands = 2;
 }
 
-message CommandRequest {
-  uint32 agentId = 1;
+message FpingCommandResponse {
+  string Version = 1;
+  repeated string IPs = 2;
+  uint32 TimeoutMS = 3;
 }
 
-message CommandCheckSumResponse {
-  string checkSum = 1;
+message MtrCommandResponse {
+  string Version = 1;
+  string IP = 2;
+  uint32 HopLimit = 3;
+  uint32 TimeoutMS = 4;
 }
 
 service Controller {
-  rpc GetCommandCheckSum (CommandRequest) returns (CommandCheckSumResponse);
-  rpc GetPingCommand (CommandRequest) returns (CommandsResponse);
+  rpc GetTcpPingCommand (CommandRequest) returns (stream PingCommandsResponse);
+  rpc GetPingCommand (CommandRequest) returns (stream TcpPingCommandResponse);
+  rpc GetFpingCommand (CommandRequest) returns (stream FpingCommandResponse);
+  rpc GetMtrCommand (CommandRequest) returns (stream MtrCommandResponse);
 }
