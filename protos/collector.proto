@@ -44,7 +44,8 @@ message FPingReportRequest {
 message GrpcMTRResult {
   uint32 Hop = 1;
   string IP = 2;
-  uint32 RttMicros = 3;
+  bool IsTimeout = 3;
+  uint32 RttMicros = 4;
 }
 
 message MTRReportRequest {
