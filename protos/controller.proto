@@ -32,15 +32,16 @@ message TcpPingCommandResponse {
 
 message FpingCommandResponse {
   string Version = 1;
-  repeated string IPs = 2;
+  repeated string IPAddrs = 2;
   uint32 TimeoutMS = 3;
 }
 
 message MtrCommandResponse {
   string Version = 1;
   string IP = 2;
-  uint32 HopLimit = 3;
-  uint32 TimeoutMS = 4;
+  uint32 Times = 3;
+  uint32 HopLimit = 4;
+  uint32 TimeoutMS = 5;
 }
 
 service Controller {
