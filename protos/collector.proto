@@ -55,8 +55,8 @@ message MTRReportRequest {
 }
 
 service Collector {
-  rpc HeartbeatReport (stream Empty) returns (Empty);
-  rpc PingReport (stream PingReportRequest) returns (Empty);
-  rpc TcpPingReport (stream TcpPingReportRequest) returns (Empty);
-  rpc FpingReport (stream FPingReportRequest) returns (Empty);
+  rpc HeartbeatReport (Empty) returns (Empty);
+  rpc PingReport (PingReportRequest) returns (Empty);
+  rpc TcpPingReport (TcpPingReportRequest) returns (Empty);
+  rpc FpingReport (FPingReportRequest) returns (Empty);
 }
