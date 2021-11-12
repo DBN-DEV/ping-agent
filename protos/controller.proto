@@ -3,6 +3,22 @@ syntax = "proto3";
 option go_package = ".;grpc";
 package controller_grpc;
 
+enum CommandType {
+  Ping = 0;
+  TcpPing = 1;
+  Fping = 2;
+  Mtr = 3;
+}
+
+message RegisterRequest {
+  uint32 AgentID = 1;
+}
+
+message UpdateCommandResponse {
+  CommandType CommandType = 1;
+  string Version = 2;
+}
+
 message CommandRequest {
   uint32 AgentID = 1;
   string Version = 2;
@@ -45,8 +61,9 @@ message MtrCommandResponse {
 }
 
 service Controller {
-  rpc GetTcpPingCommand (CommandRequest) returns (stream PingCommandsResponse);
-  rpc GetPingCommand (CommandRequest) returns (stream TcpPingCommandResponse);
-  rpc GetFpingCommand (CommandRequest) returns (stream FpingCommandResponse);
-  rpc GetMtrCommand (CommandRequest) returns (stream MtrCommandResponse);
+  rpc CommandChange (RegisterRequest) returns (stream UpdateCommandResponse);
+  rpc GetTcpPingCommand (CommandRequest) returns (PingCommandsResponse);
+  rpc GetPingCommand (CommandRequest) returns (TcpPingCommandResponse);
+  rpc GetFpingCommand (CommandRequest) returns (FpingCommandResponse);
+  rpc GetMtrCommand (CommandRequest) returns (MtrCommandResponse);
 }
