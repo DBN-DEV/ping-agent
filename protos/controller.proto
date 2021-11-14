@@ -10,16 +10,16 @@ enum CommandType {
   Mtr = 3;
 }
 
-message RegisterRequest {
+message RegisterReq {
   uint32 AgentID = 1;
 }
 
-message UpdateCommandResponse {
+message UpdateCommandResp {
   CommandType CommandType = 1;
   string Version = 2;
 }
 
-message CommandRequest {
+message CommandReq {
   uint32 AgentID = 1;
   string Version = 2;
 }
@@ -30,7 +30,7 @@ message GrpcPingCommand {
   uint32 IntervalMS = 3;
 }
 
-message PingCommandsResponse {
+message PingCommandsResp {
   string Version = 1;
   repeated GrpcPingCommand PingCommands = 2;
 }
@@ -41,18 +41,18 @@ message GrpcTcpPingCommand {
   uint32 IntervalMS = 3;
 }
 
-message TcpPingCommandResponse {
+message TcpPingCommandResp {
   string Version = 1;
   repeated GrpcTcpPingCommand TcpPingCommands = 2;
 }
 
-message FpingCommandResponse {
+message FpingCommandResp {
   string Version = 1;
   repeated string IPAddrs = 2;
   uint32 TimeoutMS = 3;
 }
 
-message MtrCommandResponse {
+message MtrCommandResp {
   string Version = 1;
   string IP = 2;
   uint32 Times = 3;
@@ -61,9 +61,9 @@ message MtrCommandResponse {
 }
 
 service Controller {
-  rpc CommandChange (RegisterRequest) returns (stream UpdateCommandResponse);
-  rpc GetTcpPingCommand (CommandRequest) returns (PingCommandsResponse);
-  rpc GetPingCommand (CommandRequest) returns (TcpPingCommandResponse);
-  rpc GetFpingCommand (CommandRequest) returns (FpingCommandResponse);
-  rpc GetMtrCommand (CommandRequest) returns (MtrCommandResponse);
+  rpc Register (RegisterReq) returns (stream UpdateCommandResp);
+  rpc GetTcpPingCommand (CommandReq) returns (TcpPingCommandResp);
+  rpc GetPingCommand (CommandReq) returns (PingCommandsResp);
+  rpc GetFpingCommand (CommandReq) returns (FpingCommandResp);
+  rpc GetMtrCommand (CommandReq) returns (MtrCommandResp);
 }

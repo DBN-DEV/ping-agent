@@ -12,7 +12,7 @@ message GrpcPingResult {
   int64 UTCSendAt = 4;
 }
 
-message PingReportRequest {
+message PingReportReq {
   GrpcPingResult Result = 1;
   uint32 AgentID = 2;
 }
@@ -24,7 +24,7 @@ message GrpcTcpPingResult {
   int64 UTCSendAt = 4;
 }
 
-message TcpPingReportRequest {
+message TcpPingReportReq {
   GrpcTcpPingResult Result = 1;
   uint32 AgentID = 2;
 }
@@ -35,7 +35,7 @@ message GrpcFPingResult {
   uint32 RttMicros = 3;
 }
 
-message FPingReportRequest {
+message FPingReportReq {
   repeated GrpcFPingResult Results = 1;
   uint32 AgentID = 2;
   string Version = 3;
@@ -56,7 +56,7 @@ message MTRReportRequest {
 
 service Collector {
   rpc HeartbeatReport (Empty) returns (Empty);
-  rpc PingReport (PingReportRequest) returns (Empty);
-  rpc TcpPingReport (TcpPingReportRequest) returns (Empty);
-  rpc FpingReport (FPingReportRequest) returns (Empty);
+  rpc PingReport (PingReportReq) returns (Empty);
+  rpc TcpPingReport (TcpPingReportReq) returns (Empty);
+  rpc FpingReport (FPingReportReq) returns (Empty);
 }
