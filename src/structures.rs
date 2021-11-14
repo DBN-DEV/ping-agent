@@ -1,6 +1,10 @@
-use crate::grpc::collector_grpc::{GrpcFPingResult, GrpcMtrResult, GrpcPingResult, GrpcTcpPingResult};
-use crate::grpc::controller_grpc::{FpingCommandResponse, GrpcPingCommand, GrpcTcpPingCommand, MtrCommandResponse};
-use chrono::{Utc, DateTime};
+use crate::grpc::collector_grpc::{
+    GrpcFPingResult, GrpcMtrResult, GrpcPingResult, GrpcTcpPingResult,
+};
+use crate::grpc::controller_grpc::{
+    FpingCommandResp, GrpcPingCommand, GrpcTcpPingCommand, MtrCommandResp,
+};
+use chrono::{DateTime, Utc};
 use std::convert::TryFrom;
 use std::net::{AddrParseError, IpAddr};
 use std::option::Option::Some;
@@ -94,10 +98,10 @@ pub struct FPingCommand {
     pub timeout: Duration,
 }
 
-impl TryFrom<FpingCommandResponse> for FPingCommand {
+impl TryFrom<FpingCommandResp> for FPingCommand {
     type Error = AddrParseError;
 
-    fn try_from(value: FpingCommandResponse) -> Result<Self, Self::Error> {
+    fn try_from(value: FpingCommandResp) -> Result<Self, Self::Error> {
         let mut ips = Vec::with_capacity(value.ip_addrs.len());
         for ip in value.ip_addrs.iter() {
             let ip = ip.parse::<IpAddr>()?;
@@ -142,10 +146,10 @@ pub struct MtrCommand {
     pub timeout: Duration,
 }
 
-impl TryFrom<MtrCommandResponse> for MtrCommand {
+impl TryFrom<MtrCommandResp> for MtrCommand {
     type Error = AddrParseError;
 
-    fn try_from(value: MtrCommandResponse) -> Result<Self, Self::Error> {
+    fn try_from(value: MtrCommandResp) -> Result<Self, Self::Error> {
         let ip = value.ip.parse::<IpAddr>()?;
         Ok(Self {
             version: value.version,
@@ -168,14 +172,14 @@ impl Into<GrpcMtrResult> for MtrResult {
     fn into(self) -> GrpcMtrResult {
         let mut rtt = 0;
         if let Some(r) = self.rtt {
-            rtt = r.as_micros() as u32; 
+            rtt = r.as_micros() as u32;
         }
-        
+
         GrpcMtrResult {
             hop: self.hop,
             ip: self.ip,
             is_timeout: self.is_timeout,
-            rtt_micros: rtt
+            rtt_micros: rtt,
         }
     }
 }
