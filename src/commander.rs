@@ -7,10 +7,10 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 use std::convert::TryFrom;
 use std::result::Result::Err;
 use std::str::FromStr;
-use tokio::sync::mpsc::Sender;
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::mpsc::Sender;
 use tokio::time;
 use tonic::codec::Streaming;
 use tonic::codegen::http::uri::InvalidUri;
@@ -134,7 +134,9 @@ impl Commander {
                     let resp = resp.into_inner();
                     info!("Recv ping commands len:{}", resp.ping_commands.len());
                     let commands = Self::build_ping_commands(resp);
-                    tx.send(commands).await.expect_err("Send ping commands fail");
+                    tx.send(commands)
+                        .await
+                        .expect_err("Send ping commands fail");
                 }
                 Err(e) => warn!("Get ping command fail, err:{}", e.message()),
             }
@@ -180,9 +182,14 @@ impl Commander {
             match resp {
                 Ok(resp) => {
                     let resp = resp.into_inner();
-                    info!("Recv tcp ping commands len:{}", resp.tcp_ping_commands.len());
+                    info!(
+                        "Recv tcp ping commands len:{}",
+                        resp.tcp_ping_commands.len()
+                    );
                     let commands = Self::build_tcp_ping_commands(resp);
-                    tx.send(commands).await.expect_err("Send tcp ping commands fail");
+                    tx.send(commands)
+                        .await
+                        .expect_err("Send tcp ping commands fail");
                 }
                 Err(e) => warn!("Get ping command fail, err:{}", e.message()),
             }
@@ -198,6 +205,4 @@ impl Commander {
 
         v
     }
-
-
 }
