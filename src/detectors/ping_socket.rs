@@ -1,6 +1,6 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use socket2::{Protocol, SockAddr, Socket, Type};
-use std::io::Result;
+use std::io::{Read, Result};
 use tokio::io::unix::AsyncFd;
 use tracing::info;
 
@@ -15,13 +15,13 @@ pub(crate) struct PingSocket {
 }
 
 impl PingSocket {
-    pub(crate) fn new(domain: &Domain) -> Result<Self> {
+    pub(crate) fn new(domain: Domain) -> Result<Self> {
         let domain = match domain {
-            Domain::V4 => socket2::Domain::ipv4(),
-            Domain::V6 => socket2::Domain::ipv6(),
+            Domain::V4 => socket2::Domain::IPV4,
+            Domain::V6 => socket2::Domain::IPV6,
         };
-        let dgram = Type::dgram();
-        let icmp4 = Some(Protocol::icmpv4());
+        let dgram = Type::DGRAM;
+        let icmp4 = Some(Protocol::ICMPV4);
         let inner = Socket::new(domain, dgram, icmp4)?;
         inner.set_nonblocking(true)?;
         let inner = AsyncFd::new(inner)?;
@@ -39,10 +39,10 @@ impl PingSocket {
         }
     }
 
-    pub(crate) async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SockAddr)> {
+    pub(crate) async fn read(&self, buf: &mut [u8]) -> Result<usize> {
         loop {
             let mut guard = self.inner.readable().await?;
-            match guard.try_io(|inner| inner.get_ref().recv_from(buf)) {
+            match guard.try_io(|inner| inner.get_ref().read(buf)) {
                 Ok(s) => return s,
                 Err(_) => continue,
             }
@@ -77,7 +77,7 @@ impl PingSocket {
         loop {
             let mut buf = BytesMut::with_capacity(len);
             buf.resize(len, 0);
-            let (reply_len, _) = self.recv_from(&mut buf).await?;
+            let reply_len = self.read(&mut buf).await?;
             if reply_len != len {
                 info!("Recv packet len:{} less than expect len:{}", reply_len, len);
                 continue;

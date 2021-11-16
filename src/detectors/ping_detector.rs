@@ -1,25 +1,133 @@
 use super::ping_socket::{Domain, PingSocket};
-use crate::structures::{DetectionResult, PingCommand, PingResult};
-use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
+use crate::structures::{PingCommand, PingResult};
+use chrono::Utc;
+use socket2::SockAddr;
+use std::io;
+use std::net::{IpAddr, SocketAddrV4, SocketAddrV6};
 use std::num::Wrapping;
+use std::time::Duration;
 use tokio::sync::broadcast;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::broadcast::error::TryRecvError;
+use tokio::sync::mpsc;
+use tokio::task;
 use tokio::time;
 use tokio::time::MissedTickBehavior;
-use tracing::{error, info};
+use tracing::info;
 
 const SMOOTH_MICROS: u64 = 1_000_000;
 const PING_PACKET_LEN: usize = 64;
 
+type CommandRx = mpsc::Receiver<Vec<PingCommand>>;
+type ResultTx = mpsc::Sender<PingResult>;
+type ExitSignalRx = broadcast::Receiver<()>;
+type ExitSignalTx = broadcast::Sender<()>;
+type ExitedTx = mpsc::Sender<()>;
+type ExitedRx = mpsc::Receiver<()>;
+
+struct Pinger {
+    sock: PingSocket,
+    timeout: Duration,
+    dst_addr: String,
+    interval: Duration,
+    dst: SockAddr,
+    len: usize,
+}
+
+impl Pinger {
+    fn from_ping_command(comm: &PingCommand) -> Self {
+        let (dst, sock) = match comm.ip {
+            IpAddr::V4(ip) => {
+                let dst = SocketAddrV4::new(ip, 0);
+                let sock = PingSocket::new(Domain::V4).expect("Get socket fail");
+
+                (SockAddr::from(dst), sock)
+            }
+            IpAddr::V6(ip) => {
+                let dst = SocketAddrV6::new(ip, 0, 0, 0);
+                let sock = PingSocket::new(Domain::V6).expect("Get socket fail");
+
+                (SockAddr::from(dst), sock)
+            }
+        };
+
+        Self {
+            sock,
+            timeout: comm.timeout,
+            dst_addr: comm.address.clone(),
+            interval: comm.interval,
+            dst,
+            len: PING_PACKET_LEN,
+        }
+    }
+
+    async fn loop_ping(&self, result_tx: ResultTx, mut rx: ExitSignalRx, tx: ExitedTx) {
+        let mut seq = Wrapping(0_u16);
+
+        let mut interval = time::interval(self.interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        loop {
+            interval.tick().await;
+
+            seq += Wrapping(1);
+            if seq == Wrapping(0) {
+                seq += Wrapping(1);
+            }
+
+            let result = self.ping(seq.0).await.expect("Send/Recv ping fail");
+
+            result_tx.send(result).await.expect_err("Send result fail");
+
+            match rx.try_recv() {
+                Ok(_) => {
+                    tx.send(()).await.expect("Send exited signal fail");
+                    return;
+                }
+                Err(TryRecvError::Closed) | Err(TryRecvError::Lagged(_)) => {
+                    panic!("Recv exit signal fail");
+                }
+                Err(broadcast::error::TryRecvError::Empty) => (),
+            }
+        }
+    }
+
+    async fn ping(&self, seq: u16) -> io::Result<PingResult> {
+        self.sock.send_request(seq, self.len, &self.dst).await?;
+
+        let utc_send_at = Utc::now();
+        let result = time::timeout(self.timeout, self.sock.recv_reply(seq, self.len)).await;
+
+        match result {
+            Ok(Ok(())) => {
+                let utc_recv_at = Utc::now();
+                let rtt = (utc_recv_at - utc_send_at).to_std().unwrap();
+                Ok(PingResult {
+                    address: self.dst_addr.clone(),
+                    is_timeout: false,
+                    send_at: utc_send_at,
+                    rtt: Some(rtt),
+                })
+            }
+            Ok(Err(e)) => Err(e),
+            Err(_) => Ok(PingResult {
+                address: self.dst_addr.clone(),
+                is_timeout: true,
+                send_at: utc_send_at,
+                rtt: None,
+            }),
+        }
+    }
+}
+
 pub struct PingDetector {
-    exited_tx: Sender<()>,
-    exited_rx: Receiver<()>,
-    exit_signal_tx: broadcast::Sender<()>,
+    exited_tx: ExitedTx,
+    exited_rx: ExitedRx,
+    exit_signal_tx: ExitSignalTx,
 }
 
 impl PingDetector {
-    pub fn new() -> Self {
-        let (exited_tx, exited_rx) = channel(10);
+    pub(crate) fn new() -> Self {
+        let (exited_tx, exited_rx) = mpsc::channel(10);
         let (exit_signal_tx, _) = broadcast::channel(1);
         Self {
             exited_tx,
@@ -28,160 +136,61 @@ impl PingDetector {
         }
     }
 
-    async fn ping_v4(
-        address: String,
-        ip: Ipv4Addr,
-        timeout: time::Duration,
-        interval: time::Duration,
-        mut exit_signal_rx: broadcast::Receiver<()>,
-        result_tx: Sender<DetectionResult>,
-        exited_tx: Sender<()>,
-    ) {
-        let dst = SocketAddrV4::new(ip, 0).into();
-        let mut seq = Wrapping(0_u16);
-        let sock = PingSocket::new(&Domain::V4);
-        let sock = match sock {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Get socket fail! {}", e);
-                std::process::exit(1);
-            }
-        };
-        let mut interval = time::interval(interval);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    async fn stop_all_ping_task(&mut self) {
+        let total = self.exit_signal_tx.receiver_count();
+        if total == 0 {
+            info!("No ping v4 task need to be stop");
+            return;
+        }
+
+        info!("Stop all ping tasks. total {}", total);
+        self.exit_signal_tx
+            .send(())
+            .expect("Broadcast stop ping v4 task fail");
+        let mut completed_num = 0;
         loop {
-            interval.tick().await;
-
-            let sock = &sock;
-            seq += Wrapping(1);
-            if seq == Wrapping(0) {
-                seq += Wrapping(1);
-            }
-            if let Err(e) = sock.send_request(seq.0, PING_PACKET_LEN, &dst).await {
-                error!("Socket send fail! {}", e);
-                exited_tx.send(()).await.unwrap_or_else(|err| {
-                    error!("Exited tx send fail, {}", err);
-                    std::process::abort();
-                });
+            self.exited_rx
+                .recv()
+                .await
+                .expect("Recv ping v4 exited fail");
+            completed_num += 1;
+            if completed_num == total {
+                info!("All ping v4 tasks was stop.");
                 return;
-            };
-
-            let send_at = time::Instant::now();
-            let utc_send_at = chrono::Utc::now();
-            let result = time::timeout(timeout, sock.recv_reply(seq.0, PING_PACKET_LEN)).await;
-            let address = address.clone();
-            let result = match result {
-                Ok(_) => PingResult {
-                    address,
-                    is_timeout: false,
-                    send_at: utc_send_at,
-                    rtt: Some(send_at.elapsed()),
-                },
-                Err(_) => PingResult {
-                    address,
-                    is_timeout: true,
-                    send_at: utc_send_at,
-                    rtt: None,
-                },
-            };
-            let result = DetectionResult::PingResult(result);
-            result_tx.send(result).await.unwrap_or_else(|err| {
-                error!("Exited tx send fail, {}", err);
-                std::process::exit(1)
-            });
-
-            match exit_signal_rx.try_recv() {
-                Ok(_) => {
-                    exited_tx.send(()).await.unwrap_or_else(|err| {
-                        error!("Exited tx send fail, {}", err);
-                        std::process::exit(1)
-                    });
-                    return;
-                }
-                Err(broadcast::error::TryRecvError::Closed) => {
-                    error!("Exit signal recv fail, closed");
-                    std::process::exit(1)
-                }
-                Err(broadcast::error::TryRecvError::Lagged(_)) => {
-                    error!("Exit signal recv fail, lagged");
-                    std::process::exit(1)
-                }
-                Err(broadcast::error::TryRecvError::Empty) => (),
             }
         }
     }
 
-    pub async fn start_loop(
-        mut self,
-        mut command_rx: Receiver<Vec<PingCommand>>,
-        result_tx: Sender<DetectionResult>,
-    ) {
-        let mut total = 0;
+    pub(crate) async fn detect(&mut self, mut command_rx: CommandRx, result_tx: ResultTx) {
         loop {
-            let commands = match command_rx.recv().await {
-                None => {
-                    error!("Command rx fail");
-                    std::process::exit(1);
-                }
-                Some(c) => c,
-            };
+            let commands = command_rx.recv().await.expect("Command rx fail");
+            info!("Recv ping commands");
 
-            if total == 0 {
-                info!("No task need to stop");
-            } else {
-                info!(
-                    "Command change start to stop all ping tasks. total {}",
-                    total
-                );
-                if let Err(e) = self.exit_signal_tx.send(()) {
-                    error!("Exit signal tx fail. error: {}", e);
-                    std::process::exit(1);
-                }
-                let mut completed_num = 0;
-                'inner: loop {
-                    if self.exited_rx.recv().await.is_some() {
-                        completed_num += 1;
-                        if completed_num == total {
-                            info!("All tasks was stop.");
-                            break 'inner;
-                        }
-                    } else {
-                        // tx 不可能失效，如果 tx 失效则直接退出进程
-                        error!("Completed rx fail.");
-                        std::process::exit(1);
-                    }
-                }
-            }
+            self.stop_all_ping_task();
 
             if commands.is_empty() {
-                info!("Command is empty, have noting to do");
+                info!("Commands is empty, noting to do");
                 continue;
             }
 
-            total = commands.len();
-            info!("Start all ping tasks, total {}", total);
-            let total_u64 = total as u64;
-            let smooth_task_time = time::Duration::from_micros(SMOOTH_MICROS / total_u64);
+            let total = commands.len();
+
+            info!("Start ping tasks, total {}", commands.len());
+
+            let smooth_task_time = time::Duration::from_micros(SMOOTH_MICROS / total as u64);
             let mut smooth_task_ticker = time::interval(smooth_task_time);
-            for command in &commands {
+            for command in commands {
                 smooth_task_ticker.tick().await;
-                let timeout = command.timeout;
-                let interval = command.interval;
-                match command.ip {
-                    IpAddr::V4(ip) => {
-                        tokio::task::spawn(Self::ping_v4(
-                            command.address.clone(),
-                            ip,
-                            timeout,
-                            interval,
-                            self.exit_signal_tx.subscribe(),
-                            result_tx.clone(),
-                            self.exited_tx.clone(),
-                        ));
-                    }
-                    IpAddr::V6(_) => unimplemented!(),
-                }
+
+                let result_tx = result_tx.clone();
+                let exit_signal_rx = self.exit_signal_tx.subscribe();
+                let exited_tx = self.exited_tx.clone();
+                task::spawn(async move {
+                    let pinger = Pinger::from_ping_command(&command);
+                    pinger.loop_ping(result_tx, exit_signal_rx, exited_tx).await;
+                });
             }
+
             info!("All ping tasks was started, total {}", total)
         }
     }
