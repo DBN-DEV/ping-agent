@@ -139,23 +139,23 @@ impl PingDetector {
     async fn stop_all_ping_task(&mut self) {
         let total = self.exit_signal_tx.receiver_count();
         if total == 0 {
-            info!("No ping v4 task need to be stop");
+            info!("No ping task need to be stop");
             return;
         }
 
         info!("Stop all ping tasks. total {}", total);
         self.exit_signal_tx
             .send(())
-            .expect("Broadcast stop ping v4 task fail");
+            .expect("Broadcast stop ping task fail");
         let mut completed_num = 0;
         loop {
             self.exited_rx
                 .recv()
                 .await
-                .expect("Recv ping v4 exited fail");
+                .expect("Recv ping exited fail");
             completed_num += 1;
             if completed_num == total {
-                info!("All ping v4 tasks was stop.");
+                info!("All ping tasks was stop.");
                 return;
             }
         }
@@ -166,7 +166,7 @@ impl PingDetector {
             let commands = command_rx.recv().await.expect("Command rx fail");
             info!("Recv ping commands");
 
-            self.stop_all_ping_task();
+            self.stop_all_ping_task().await;
 
             if commands.is_empty() {
                 info!("Commands is empty, noting to do");
