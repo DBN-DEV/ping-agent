@@ -34,7 +34,7 @@ struct Pinger {
 }
 
 impl Pinger {
-    fn from_ping_command(comm: &PingCommand) -> Self {
+    fn from_command(comm: PingCommand) -> Self {
         let (dst, sock) = match comm.ip {
             IpAddr::V4(ip) => {
                 let dst = SocketAddrV4::new(ip, 0);
@@ -53,7 +53,7 @@ impl Pinger {
         Self {
             sock,
             timeout: comm.timeout,
-            dst_addr: comm.address.clone(),
+            dst_addr: comm.address,
             interval: comm.interval,
             dst,
             len: PING_PACKET_LEN,
@@ -186,7 +186,7 @@ impl PingDetector {
                 let exit_signal_rx = self.exit_signal_tx.subscribe();
                 let exited_tx = self.exited_tx.clone();
                 task::spawn(async move {
-                    let pinger = Pinger::from_ping_command(&command);
+                    let pinger = Pinger::from_command(command);
                     pinger.loop_ping(result_tx, exit_signal_rx, exited_tx).await;
                 });
             }
