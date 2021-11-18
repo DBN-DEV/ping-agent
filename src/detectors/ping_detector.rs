@@ -149,10 +149,7 @@ impl PingDetector {
             .expect("Broadcast stop ping task fail");
         let mut completed_num = 0;
         loop {
-            self.exited_rx
-                .recv()
-                .await
-                .expect("Recv ping exited fail");
+            self.exited_rx.recv().await.expect("Recv ping exited fail");
             completed_num += 1;
             if completed_num == total {
                 info!("All ping tasks was stop.");
