@@ -23,27 +23,54 @@ const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(10);
 
 type Client = ControllerClient<Channel>;
 
+type UpdateTx = broadcast::Sender<UpdateCommandResp>;
+type UpdateRx = broadcast::Receiver<UpdateCommandResp>;
+
 #[derive(Debug)]
-pub struct Commander {
+pub struct SuperCommander {
     agent_id: u32,
     channel: Channel,
-    update_tx: broadcast::Sender<UpdateCommandResp>,
+    tx: UpdateTx,
 }
 
-impl Commander {
-    pub fn new(controller_add: &str, agent_id: u32) -> Result<Self, InvalidUri> {
+impl SuperCommander {
+    pub(crate) fn new(controller_add: &str, agent_id: u32) -> Result<Self, InvalidUri> {
         let uri = Uri::from_str(controller_add)?;
         let endpoint = Channel::builder(uri);
         let channel = endpoint
             .http2_keep_alive_interval(KEEP_ALIVE_INTERVAL)
             .connect_lazy();
-        let (update_tx, _) = broadcast::channel::<UpdateCommandResp>(16);
+        let (tx, _) = broadcast::channel::<UpdateCommandResp>(16);
 
         Ok(Self {
             agent_id,
             channel,
-            update_tx,
+            tx,
         })
+    }
+
+    pub(crate) fn build_commander(&self) -> Commander {
+        Commander {
+            agent_id: self.agent_id,
+            channel: self.channel.clone(),
+            rx: self.tx.subscribe(),
+        }
+    }
+
+    async fn forward_update_command(
+        &self,
+        mut stream: Streaming<UpdateCommandResp>,
+    ) -> Result<(), Status> {
+        loop {
+            let update = stream.message().await?;
+            if let Some(comm) = update {
+                info!("Recv update command");
+                self.tx.send(comm).expect("Send update command fail");
+                info!("Forward update command success");
+            } else {
+                return Err(Status::new(Code::Internal, "Recv None update command"));
+            }
+        }
     }
 
     async fn backoff() {
@@ -55,14 +82,7 @@ impl Commander {
         time::sleep(wait).await;
     }
 
-    fn build_command_req(&self, version: String) -> CommandReq {
-        return CommandReq {
-            agent_id: self.agent_id,
-            version,
-        };
-    }
-
-    pub(crate) async fn register(&self) {
+    pub(crate) async fn register(self) {
         loop {
             info!("Start register");
             let mut client = Client::new(self.channel.clone());
@@ -90,28 +110,27 @@ impl Commander {
             }
         }
     }
+}
 
-    async fn forward_update_command(
-        &self,
-        mut stream: Streaming<UpdateCommandResp>,
-    ) -> Result<(), Status> {
-        loop {
-            let update = stream.message().await?;
-            if let Some(comm) = update {
-                info!("Recv update command");
-                self.update_tx.send(comm).expect("Send update command fail");
-                info!("Forward update command success");
-            } else {
-                return Err(Status::new(Code::Internal, "Recv None update command"));
-            }
-        }
+#[derive(Debug)]
+pub struct Commander {
+    agent_id: u32,
+    channel: Channel,
+    rx: UpdateRx,
+}
+
+impl Commander {
+    fn build_command_req(&self, version: String) -> CommandReq {
+        return CommandReq {
+            agent_id: self.agent_id,
+            version,
+        };
     }
 
-    pub(crate) async fn forward_ping_command(&self, tx: Sender<Vec<PingCommand>>) {
-        let mut rx = self.update_tx.subscribe();
+    pub(crate) async fn forward_ping_command(mut self, tx: Sender<Vec<PingCommand>>) {
         let mut client = Client::new(self.channel.clone());
         loop {
-            let comm = match rx.recv().await {
+            let comm = match self.rx.recv().await {
                 Ok(c) => c,
                 Err(RecvError::Lagged(v)) => {
                     warn!("Recv ping command lagged skipped:{}", v);
@@ -146,22 +165,22 @@ impl Commander {
     fn build_ping_commands(resp: PingCommandsResp) -> Vec<PingCommand> {
         let mut v = Vec::with_capacity(resp.ping_commands.len());
         for comm in resp.ping_commands {
+            let ip = comm.ip.clone();
             let command = PingCommand::try_from(comm);
             if let Ok(command) = command {
                 v.push(command);
             } else {
-                warn!("Parse ip:{} fail skip this addr", comm.ip);
+                warn!("Parse ip:{} fail skip this addr", ip);
             }
         }
 
         v
     }
 
-    pub(crate) async fn forward_tcp_ping_command(&self, tx: Sender<Vec<TcpPingCommand>>) {
-        let mut rx = self.update_tx.subscribe();
+    pub(crate) async fn forward_tcp_ping_command(mut self, tx: Sender<Vec<TcpPingCommand>>) {
         let mut client = Client::new(self.channel.clone());
         loop {
-            let comm = match rx.recv().await {
+            let comm = match self.rx.recv().await {
                 Ok(c) => c,
                 Err(RecvError::Lagged(v)) => {
                     warn!("Recv tcp ping command lagged skipped:{}", v);

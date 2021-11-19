@@ -140,7 +140,7 @@ impl TcpPingDetector {
         }
     }
 
-    pub(crate) async fn detect(&mut self, mut command_rx: CommandRx, result_tx: ResultTx) {
+    pub(crate) async fn detect(mut self, mut command_rx: CommandRx, result_tx: ResultTx) {
         loop {
             let commands = command_rx.recv().await.expect("Command rx fail");
             info!("Recv tcp ping commands");
