@@ -1,20 +1,23 @@
 use crate::grpc::collector_grpc::collector_client::CollectorClient;
 use crate::grpc::collector_grpc::{PingReportReq, TcpPingReportReq};
 use crate::structures::{PingResult, TcpPingResult};
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use std::str::FromStr;
+use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::time;
 use tonic::codegen::http::uri::InvalidUri;
 use tonic::transport::{Channel, Uri};
-use tracing::warn;
+use tracing::{info, warn};
 
-type Client = CollectorClient<Channel>;
+const RETRY_INTERVAL: u64 = 10;
+
 type PingResultRx = mpsc::Receiver<PingResult>;
 type TcpPingResultRx = mpsc::Receiver<TcpPingResult>;
 
-const BASE_CONNECT_RETRY_INTERVAL: u64 = 10;
-
+#[derive(Clone)]
 pub struct Reporter {
-    server_add: String,
     channel: Channel,
     agent_id: u32,
 }
@@ -23,11 +26,7 @@ impl Reporter {
     pub fn new(server_add: &str, agent_id: u32) -> Result<Self, InvalidUri> {
         let uri = Uri::from_str(server_add)?;
         let channel = Channel::builder(uri).connect_lazy();
-        Ok(Self {
-            server_add: server_add.to_string(),
-            channel,
-            agent_id,
-        })
+        Ok(Self { channel, agent_id })
     }
 
     fn build_ping_request(&self, result: PingResult) -> PingReportReq {
@@ -46,28 +45,70 @@ impl Reporter {
         }
     }
 
-    pub(crate) async fn report_ping_result(&self, rx: &mut PingResultRx) {
-        let mut client = CollectorClient::new(self.channel.clone());
-        loop {
-            let r = rx.recv().await.expect("Recv Ping result fail");
-            let req = self.build_ping_request(r);
+    async fn backoff() {
+        let rand_num = SmallRng::from_entropy().gen_range(0..=5);
+        let wait_sec = RETRY_INTERVAL + rand_num;
+        info!("Wait {} sec retry", wait_sec);
 
-            let result = client.ping_report(req).await;
-            if let Err(e) = result {
-                warn!("Send ping result fail, err:{}", e.message());
+        let wait = Duration::from_secs(wait_sec);
+        time::sleep(wait).await;
+    }
+
+    pub(crate) async fn report_ping_result(self, mut rx: PingResultRx) {
+        let mut client = CollectorClient::new(self.channel.clone());
+        let (failed_tx, mut failed_rx) = mpsc::channel::<PingReportReq>(1);
+
+        loop {
+            tokio::select! {
+                biased;
+
+                req = failed_rx.recv() => {
+                    let req = req.expect("Recv failed ping req fail");
+                    let result = client.ping_report(req.clone()).await;
+                    if let Err(e) = result {
+                        warn!("Send ping result fail, err:{}", e.message());
+                        failed_tx.send(req).await.expect_err("Secv failed ping req fail");
+                        Self::backoff().await;
+                    }
+                }
+                r = rx.recv() => {
+                    let r = r.expect("Recv ping result fail");
+                    let req = self.build_ping_request(r);
+                    let result = client.ping_report(req.clone()).await;
+                    if let Err(e) = result {
+                        warn!("Send ping result fail, err:{}", e.message());
+                        failed_tx.send(req).await.expect("Secv failed req fail");
+                    }
+                }
             }
         }
     }
 
-    pub(crate) async fn report_tcp_ping_result(&self, rx: &mut TcpPingResultRx) {
+    pub(crate) async fn report_tcp_ping_result(self, mut rx: TcpPingResultRx) {
         let mut client = CollectorClient::new(self.channel.clone());
+        let (failed_tx, mut failed_rx) = mpsc::channel::<TcpPingReportReq>(1);
         loop {
-            let r = rx.recv().await.expect("Recv tcp ping result fail");
-            let req = self.build_tcp_ping_request(r);
+            tokio::select! {
+                biased;
 
-            let result = client.tcp_ping_report(req).await;
-            if let Err(e) = result {
-                warn!("Send tcp ping result fail, err:{}", e.message());
+                req = failed_rx.recv() => {
+                    let req = req.expect("Recv failed tcp ping req fail");
+                    let result = client.tcp_ping_report(req.clone()).await;
+                    if let Err(e) = result {
+                        warn!("Send ping result fail, err:{}", e.message());
+                        failed_tx.send(req).await.expect_err("Secv failed tcp ping req fail");
+                        Self::backoff().await;
+                    }
+                }
+                r = rx.recv() => {
+                    let r = r.expect("Recv tcp ping result fail");
+                    let req = self.build_tcp_ping_request(r);
+                    let result = client.tcp_ping_report(req.clone()).await;
+                    if let Err(e) = result {
+                        warn!("Send tcp ping result fail, err:{}", e.message());
+                        failed_tx.send(req).await.expect("Secv failed tcp ping req fail");
+                    }
+                }
             }
         }
     }
