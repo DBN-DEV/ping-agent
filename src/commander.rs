@@ -103,8 +103,7 @@ impl SuperCommander {
                     }
                 }
                 Err(e) => {
-                    // must be err
-                    warn!("Agent register fail err:{}", e.message());
+                    warn!("Register fail err:{}", e.message());
                     Self::backoff().await;
                 }
             }
@@ -121,10 +120,10 @@ pub struct Commander {
 
 impl Commander {
     fn build_command_req(&self, version: String) -> CommandReq {
-        return CommandReq {
+        CommandReq {
             agent_id: self.agent_id,
             version,
-        };
+        }
     }
 
     pub(crate) async fn forward_ping_command(mut self, tx: Sender<Vec<PingCommand>>) {

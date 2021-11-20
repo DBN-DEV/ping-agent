@@ -38,17 +38,17 @@ pub struct PingResult {
     pub rtt: Option<Duration>,
 }
 
-impl Into<GrpcPingResult> for PingResult {
-    fn into(self) -> GrpcPingResult {
+impl From<PingResult> for GrpcPingResult {
+    fn from(v: PingResult) -> Self {
         let mut rtt_micros = 0;
-        if let Some(rtt) = self.rtt {
+        if let Some(rtt) = v.rtt {
             rtt_micros = rtt.as_micros() as u32;
         }
         GrpcPingResult {
-            ip: self.address,
-            is_timeout: self.is_timeout,
+            ip: v.address,
+            is_timeout: v.is_timeout,
             rtt_micros,
-            utc_send_at: self.send_at.timestamp(),
+            utc_send_at: v.send_at.timestamp(),
         }
     }
 }
@@ -76,17 +76,17 @@ pub struct TcpPingResult {
     pub rtt: Option<Duration>,
 }
 
-impl Into<GrpcTcpPingResult> for TcpPingResult {
-    fn into(self) -> GrpcTcpPingResult {
+impl From<TcpPingResult> for GrpcTcpPingResult {
+    fn from(v: TcpPingResult) -> Self {
         let mut rtt_micros = 0;
-        if let Some(rtt) = self.rtt {
+        if let Some(rtt) = v.rtt {
             rtt_micros = rtt.as_micros() as u32;
         }
         GrpcTcpPingResult {
-            target: self.target,
-            is_timeout: self.is_timeout,
+            target: v.target,
+            is_timeout: v.is_timeout,
             rtt_micros,
-            utc_send_at: self.send_at.timestamp(),
+            utc_send_at: v.send_at.timestamp(),
         }
     }
 }
@@ -123,16 +123,16 @@ pub struct FPingResult {
     pub rtt: Option<Duration>,
 }
 
-impl Into<GrpcFPingResult> for FPingResult {
-    fn into(self) -> GrpcFPingResult {
+impl From<FPingResult> for GrpcFPingResult {
+    fn from(v: FPingResult) -> Self {
         let mut rtt = 0;
-        if let Some(r) = self.rtt {
+        if let Some(r) = v.rtt {
             rtt = r.as_micros() as u32;
         }
 
         GrpcFPingResult {
-            ip: self.ip,
-            is_timeout: self.is_timeout,
+            ip: v.ip,
+            is_timeout: v.is_timeout,
             rtt_micros: rtt,
         }
     }
@@ -168,18 +168,18 @@ pub struct MtrResult {
     pub rtt: Option<Duration>,
 }
 
-impl Into<GrpcMtrResult> for MtrResult {
-    fn into(self) -> GrpcMtrResult {
-        let mut rtt = 0;
-        if let Some(r) = self.rtt {
-            rtt = r.as_micros() as u32;
+impl From<MtrResult> for GrpcMtrResult {
+    fn from(v: MtrResult) -> Self {
+        let mut rtt_micros = 0;
+        if let Some(r) = v.rtt {
+            rtt_micros = r.as_micros() as u32;
         }
 
         GrpcMtrResult {
-            hop: self.hop,
-            ip: self.ip,
-            is_timeout: self.is_timeout,
-            rtt_micros: rtt,
+            hop: v.hop,
+            ip: v.ip,
+            is_timeout: v.is_timeout,
+            rtt_micros,
         }
     }
 }
