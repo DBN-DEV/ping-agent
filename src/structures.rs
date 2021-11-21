@@ -10,6 +10,7 @@ use std::net::{AddrParseError, IpAddr};
 use std::option::Option::Some;
 use std::time::Duration;
 
+#[derive(Debug)]
 pub struct PingCommand {
     pub ip: IpAddr,
     pub address: String,
@@ -31,6 +32,7 @@ impl TryFrom<GrpcPingCommand> for PingCommand {
     }
 }
 
+#[derive(Debug)]
 pub struct PingResult {
     pub address: String,
     pub is_timeout: bool,
@@ -53,6 +55,7 @@ impl From<PingResult> for GrpcPingResult {
     }
 }
 
+#[derive(Debug)]
 pub struct TcpPingCommand {
     pub target: String,
     pub interval: Duration,
@@ -69,6 +72,7 @@ impl From<GrpcTcpPingCommand> for TcpPingCommand {
     }
 }
 
+#[derive(Debug)]
 pub struct TcpPingResult {
     pub target: String,
     pub is_timeout: bool,
@@ -91,6 +95,7 @@ impl From<TcpPingResult> for GrpcTcpPingResult {
     }
 }
 
+#[derive(Debug)]
 pub struct FPingCommand {
     pub version: String,
     pub ips: Vec<IpAddr>,
@@ -117,6 +122,7 @@ impl TryFrom<FpingCommandResp> for FPingCommand {
     }
 }
 
+#[derive(Debug)]
 pub struct FPingResult {
     pub ip: String,
     pub is_timeout: bool,
@@ -138,6 +144,7 @@ impl From<FPingResult> for GrpcFPingResult {
     }
 }
 
+#[derive(Debug)]
 pub struct MtrCommand {
     pub version: String,
     pub ip: IpAddr,
@@ -161,6 +168,7 @@ impl TryFrom<MtrCommandResp> for MtrCommand {
     }
 }
 
+#[derive(Debug)]
 pub struct MtrResult {
     pub hop: u32,
     pub ip: String,

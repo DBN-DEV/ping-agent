@@ -76,7 +76,7 @@ impl Pinger {
 
             let result = self.ping(seq.0).await.expect("Send/Recv ping fail");
 
-            result_tx.send(result).await.expect_err("Send result fail");
+            result_tx.send(result).await.expect("Send result fail");
 
             match rx.try_recv() {
                 Ok(_) => {

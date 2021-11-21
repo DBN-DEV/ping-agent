@@ -152,9 +152,7 @@ impl Commander {
                     let resp = resp.into_inner();
                     info!("Recv ping commands len:{}", resp.ping_commands.len());
                     let commands = Self::build_ping_commands(resp);
-                    tx.send(commands)
-                        .await
-                        .expect_err("Send ping commands fail");
+                    tx.send(commands).await.expect("Send ping commands fail");
                 }
                 Err(e) => warn!("Get ping command fail, err:{}", e.message()),
             }
@@ -207,7 +205,7 @@ impl Commander {
                     let commands = Self::build_tcp_ping_commands(resp);
                     tx.send(commands)
                         .await
-                        .expect_err("Send tcp ping commands fail");
+                        .expect("Send tcp ping commands fail");
                 }
                 Err(e) => warn!("Get ping command fail, err:{}", e.message()),
             }

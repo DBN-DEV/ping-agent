@@ -53,13 +53,17 @@ async fn main() {
 
     let c = super_commander.build_commander();
     handlers.push(task::spawn(c.forward_ping_command(ping_command_tx)));
-    handlers.push(task::spawn(ping_detector.detect(ping_command_rx, ping_result_tx)));
+    handlers.push(task::spawn(
+        ping_detector.detect(ping_command_rx, ping_result_tx),
+    ));
     let r = reporter.clone();
     handlers.push(task::spawn(r.report_ping_result(ping_result_rx)));
 
     let c = super_commander.build_commander();
     handlers.push(task::spawn(c.forward_tcp_ping_command(tcp_ping_command_tx)));
-    handlers.push(task::spawn(tcp_ping_detector.detect(tcp_ping_command_rx, tcp_ping_result_tx)));
+    handlers.push(task::spawn(
+        tcp_ping_detector.detect(tcp_ping_command_rx, tcp_ping_result_tx),
+    ));
     let r = reporter.clone();
     handlers.push(task::spawn(r.report_tcp_ping_result(tcp_ping_result_rx)));
 

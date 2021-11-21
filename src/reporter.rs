@@ -67,7 +67,7 @@ impl Reporter {
                     let result = client.ping_report(req.clone()).await;
                     if let Err(e) = result {
                         warn!("Send ping result fail, err:{}", e.message());
-                        failed_tx.send(req).await.expect_err("Secv failed ping req fail");
+                        failed_tx.send(req).await.expect("Secv failed ping req fail");
                         Self::backoff().await;
                     }
                 }
@@ -96,7 +96,7 @@ impl Reporter {
                     let result = client.tcp_ping_report(req.clone()).await;
                     if let Err(e) = result {
                         warn!("Send ping result fail, err:{}", e.message());
-                        failed_tx.send(req).await.expect_err("Secv failed tcp ping req fail");
+                        failed_tx.send(req).await.expect("Secv failed tcp ping req fail");
                         Self::backoff().await;
                     }
                 }

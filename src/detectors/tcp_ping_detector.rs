@@ -72,18 +72,13 @@ impl TcpPinger {
             let result = self.ping().await;
 
             match result {
-                Ok(r) => {
-                    result_tx
-                        .send(r)
-                        .await
-                        .expect_err("Send tcp ping result fail");
-                }
+                Ok(r) => result_tx.send(r).await.expect("Send tcp ping result fail"),
                 Err(e) => warn!("Tcp ping fail target:{}, err:{}", self.target, e),
             }
 
             match rx.try_recv() {
                 Ok(_) => {
-                    tx.send(()).await.expect_err("Exited tx send fail");
+                    tx.send(()).await.expect("Exited tx send fail");
                     return;
                 }
                 Err(TryRecvError::Closed | TryRecvError::Lagged(_)) => {
