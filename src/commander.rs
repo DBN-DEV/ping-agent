@@ -19,7 +19,6 @@ use tonic::{Code, Status};
 use tracing::{info, warn};
 
 const RETRY_INTERVAL: u64 = 10;
-const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(10);
 
 type Client = ControllerClient<Channel>;
 
@@ -37,9 +36,7 @@ impl SuperCommander {
     pub(crate) fn new(controller_add: &str, agent_id: u32) -> Result<Self, InvalidUri> {
         let uri = Uri::from_str(controller_add)?;
         let endpoint = Channel::builder(uri);
-        let channel = endpoint
-            .http2_keep_alive_interval(KEEP_ALIVE_INTERVAL)
-            .connect_lazy();
+        let channel = endpoint.connect_lazy();
         let (tx, _) = broadcast::channel::<UpdateCommandResp>(16);
 
         Ok(Self {
