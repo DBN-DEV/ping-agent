@@ -13,7 +13,7 @@ message GrpcPingResult {
 }
 
 message PingReportReq {
-  GrpcPingResult Result = 1;
+  repeated GrpcPingResult Results = 1;
   uint32 AgentID = 2;
 }
 
