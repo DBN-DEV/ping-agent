@@ -14,7 +14,6 @@ use tokio::time;
 use tokio::time::MissedTickBehavior;
 use tracing::info;
 
-const SMOOTH_MICROS: u64 = 1_000_000;
 const PING_PACKET_LEN: usize = 64;
 
 type CommandRx = mpsc::Receiver<Vec<PingCommand>>;
@@ -174,11 +173,7 @@ impl PingDetector {
 
             info!("Start ping tasks, total {}", commands.len());
 
-            let smooth_task_time = time::Duration::from_micros(SMOOTH_MICROS / total as u64);
-            let mut smooth_task_ticker = time::interval(smooth_task_time);
             for command in commands {
-                smooth_task_ticker.tick().await;
-
                 let result_tx = result_tx.clone();
                 let exit_signal_rx = self.exit_signal_tx.subscribe();
                 let exited_tx = self.exited_tx.clone();
