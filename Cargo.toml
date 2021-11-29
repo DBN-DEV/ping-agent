@@ -9,6 +9,7 @@ build = "build.rs"
 [profile.release]
 lto = "fat"
 codegen-units = 1
+panic = "abort"
 
 [dependencies]
 socket2 = "0.4"
