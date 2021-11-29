@@ -6,8 +6,8 @@ use rand::{Rng, SeedableRng};
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::time;
 use tokio::task;
+use tokio::time;
 use tokio::time::MissedTickBehavior;
 use tonic::codegen::http::uri::InvalidUri;
 use tonic::transport::{Channel, Uri};
@@ -35,7 +35,7 @@ impl Reporter {
     }
 
     fn build_ping_request(&self, results: Vec<PingResult>) -> PingReportReq {
-        let r = results.into_iter().map(|x|x.into()).collect();
+        let r = results.into_iter().map(|x| x.into()).collect();
         PingReportReq {
             agent_id: self.agent_id,
             results: r,
@@ -94,12 +94,17 @@ impl Reporter {
                 }
                 s = flush_buff_rx.recv() => {
                     s.expect("Recv flush buff signal fail");
+                    if buff.is_empty() {
+                        continue
+                    }
+
                     let req = self.build_ping_request(buff);
                     let result = client.ping_report(req.clone()).await;
                     if let Err(e) = result {
                         warn!("Send ping result fail, err:{}", e.message());
                         failed_tx.send(req).await.expect("Secv failed req fail");
                     }
+
                     buff = Vec::with_capacity(BATCH_SIZE);
                 }
                 r = rx.recv() => {
