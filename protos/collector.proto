@@ -48,15 +48,15 @@ message GrpcMTRResult {
   uint32 RttMicros = 4;
 }
 
-message MTRReportRequest {
+message MTRReportReq {
   repeated GrpcMTRResult Results = 1;
   uint32 AgentID = 2;
   string Version = 3;
 }
 
 service Collector {
-  rpc HeartbeatReport (Empty) returns (Empty);
   rpc PingReport (PingReportReq) returns (Empty);
   rpc TcpPingReport (TcpPingReportReq) returns (Empty);
   rpc FpingReport (FPingReportReq) returns (Empty);
+  rpc MtrReport (MTRReportReq) returns (Empty);
 }
