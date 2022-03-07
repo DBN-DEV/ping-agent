@@ -1,0 +1,18 @@
+name: check
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  UnitTest:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - run: rustup component add clippy
+
+    - uses: actions-rs/clippy-check@v1
+      with:
+        args: --all-features
