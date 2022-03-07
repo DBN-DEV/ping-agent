@@ -1,122 +1,15 @@
-use super::ping_socket::{Domain, PingSocket};
+use super::pinger::Pinger;
 use crate::structures::{PingCommand, PingResult};
-use chrono::Utc;
-use socket2::SockAddr;
-use std::io;
-use std::net::{IpAddr, SocketAddrV4, SocketAddrV6};
-use std::num::Wrapping;
-use std::time::Duration;
 use tokio::sync::broadcast;
-use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::mpsc;
 use tokio::task;
-use tokio::time;
-use tokio::time::MissedTickBehavior;
 use tracing::info;
 
-const PING_PACKET_LEN: usize = 64;
-
 type CommandRx = mpsc::Receiver<Vec<PingCommand>>;
-type ResultTx = mpsc::Sender<PingResult>;
-type ExitSignalRx = broadcast::Receiver<()>;
-type ExitSignalTx = broadcast::Sender<()>;
-type ExitedTx = mpsc::Sender<()>;
-type ExitedRx = mpsc::Receiver<()>;
-
-struct Pinger {
-    sock: PingSocket,
-    timeout: Duration,
-    dst_addr: String,
-    interval: Duration,
-    dst: SockAddr,
-    len: usize,
-}
-
-impl Pinger {
-    fn from_command(comm: PingCommand) -> Self {
-        let (dst, sock) = match comm.ip {
-            IpAddr::V4(ip) => {
-                let dst = SocketAddrV4::new(ip, 0);
-                let sock = PingSocket::new(Domain::V4).expect("Get socket fail");
-
-                (SockAddr::from(dst), sock)
-            }
-            IpAddr::V6(ip) => {
-                let dst = SocketAddrV6::new(ip, 0, 0, 0);
-                let sock = PingSocket::new(Domain::V6).expect("Get socket fail");
-
-                (SockAddr::from(dst), sock)
-            }
-        };
-
-        Self {
-            sock,
-            timeout: comm.timeout,
-            dst_addr: comm.address,
-            interval: comm.interval,
-            dst,
-            len: PING_PACKET_LEN,
-        }
-    }
-
-    async fn loop_ping(&self, result_tx: ResultTx, mut rx: ExitSignalRx, tx: ExitedTx) {
-        let mut seq = Wrapping(0_u16);
-
-        let mut interval = time::interval(self.interval);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
-        loop {
-            interval.tick().await;
-
-            seq += Wrapping(1);
-            if seq == Wrapping(0) {
-                seq += Wrapping(1);
-            }
-
-            let result = self.ping(seq.0).await.expect("Send/Recv ping fail");
-
-            result_tx.send(result).await.expect("Send result fail");
-
-            match rx.try_recv() {
-                Ok(_) => {
-                    tx.send(()).await.expect("Send exited signal fail");
-                    return;
-                }
-                Err(TryRecvError::Closed) | Err(TryRecvError::Lagged(_)) => {
-                    panic!("Recv exit signal fail");
-                }
-                Err(broadcast::error::TryRecvError::Empty) => (),
-            }
-        }
-    }
-
-    async fn ping(&self, seq: u16) -> io::Result<PingResult> {
-        self.sock.send_request(seq, self.len, &self.dst).await?;
-
-        let utc_send_at = Utc::now();
-        let result = time::timeout(self.timeout, self.sock.recv_reply(seq, self.len)).await;
-
-        match result {
-            Ok(Ok(())) => {
-                let utc_recv_at = Utc::now();
-                let rtt = (utc_recv_at - utc_send_at).to_std().unwrap();
-                Ok(PingResult {
-                    address: self.dst_addr.clone(),
-                    is_timeout: false,
-                    send_at: utc_send_at,
-                    rtt: Some(rtt),
-                })
-            }
-            Ok(Err(e)) => Err(e),
-            Err(_) => Ok(PingResult {
-                address: self.dst_addr.clone(),
-                is_timeout: true,
-                send_at: utc_send_at,
-                rtt: None,
-            }),
-        }
-    }
-}
+type ResultTx = tokio::sync::mpsc::Sender<PingResult>;
+type ExitSignalTx = tokio::sync::broadcast::Sender<()>;
+type ExitedTx = tokio::sync::mpsc::Sender<()>;
+type ExitedRx = tokio::sync::mpsc::Receiver<()>;
 
 pub struct PingDetector {
     exited_tx: ExitedTx,
@@ -178,7 +71,7 @@ impl PingDetector {
                 let exit_signal_rx = self.exit_signal_tx.subscribe();
                 let exited_tx = self.exited_tx.clone();
                 task::spawn(async move {
-                    let pinger = Pinger::from_command(command);
+                    let pinger = Pinger::from_ping_command(command);
                     pinger.loop_ping(result_tx, exit_signal_rx, exited_tx).await;
                 });
             }

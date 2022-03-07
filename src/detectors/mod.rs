@@ -1,5 +1,5 @@
 mod ping_detector;
-mod ping_socket;
+mod pinger;
 mod tcp_ping_detector;
 
 pub use ping_detector::PingDetector;
