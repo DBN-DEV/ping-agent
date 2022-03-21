@@ -13,7 +13,6 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct PingCommand {
     pub ip: IpAddr,
-    pub address: String,
     pub interval: Duration,
     pub timeout: Duration,
 }
@@ -25,7 +24,6 @@ impl TryFrom<GrpcPingCommand> for PingCommand {
         let ip = c.ip.parse::<IpAddr>()?;
         Ok(Self {
             ip,
-            address: c.ip,
             interval: Duration::from_millis(u64::from(c.interval_ms)),
             timeout: Duration::from_millis(u64::from(c.timeout_ms)),
         })
@@ -99,7 +97,6 @@ impl From<TcpPingResult> for GrpcTcpPingResult {
 pub struct FPingCommand {
     pub version: String,
     pub ips: Vec<IpAddr>,
-    pub addrs: Vec<String>,
     pub timeout: Duration,
 }
 
@@ -116,7 +113,6 @@ impl TryFrom<FpingCommandResp> for FPingCommand {
         Ok(Self {
             version: value.version,
             ips,
-            addrs: value.ip_addrs,
             timeout: Duration::from_millis(u64::from(value.timeout_ms)),
         })
     }
@@ -142,6 +138,12 @@ impl From<FPingResult> for GrpcFPingResult {
             rtt_micros: rtt,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct FPingResults {
+    pub results: Vec<FPingResult>,
+    pub version: String,
 }
 
 #[derive(Debug)]

@@ -35,7 +35,7 @@ impl PingDetector {
             return;
         }
 
-        info!("Stop all ping tasks. total {}", total);
+        info!("Stop ping tasks. total {}", total);
         self.exit_signal_tx
             .send(())
             .expect("Broadcast stop ping task fail");
@@ -44,7 +44,7 @@ impl PingDetector {
             self.exited_rx.recv().await.expect("Recv ping exited fail");
             completed_num += 1;
             if completed_num == total {
-                info!("All ping tasks was stop.");
+                info!("All ping tasks have been stopped");
                 return;
             }
         }
@@ -71,8 +71,8 @@ impl PingDetector {
                 let exit_signal_rx = self.exit_signal_tx.subscribe();
                 let exited_tx = self.exited_tx.clone();
                 task::spawn(async move {
-                    let pinger = Pinger::from_ping_command(command);
-                    pinger.loop_ping(result_tx, exit_signal_rx, exited_tx).await;
+                    let pinger = Pinger::from_ping_command(&command);
+                    pinger.loop_ping(command.interval, result_tx, exit_signal_rx, exited_tx).await;
                 });
             }
 

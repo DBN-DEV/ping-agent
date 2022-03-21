@@ -3,7 +3,6 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use chrono::Utc;
 use socket2::{Protocol, SockAddr, Socket, Type};
 use std::{
-    io,
     io::{Read, Result},
     net::{IpAddr, SocketAddrV4, SocketAddrV6},
     num::Wrapping,
@@ -31,15 +30,17 @@ pub(crate) enum Domain {
 pub(super) struct Pinger {
     sock: PingSocket,
     timeout: Duration,
-    dst_addr: String,
-    interval: Duration,
-    dst: SockAddr,
+    dst: (SockAddr, String),
     len: usize,
 }
 
 impl Pinger {
-    pub(super) fn from_ping_command(comm: PingCommand) -> Self {
-        let (dst, sock) = match comm.ip {
+    pub(super) fn from_ping_command(comm: &PingCommand) -> Self {
+        Self::new(comm.ip, comm.timeout, PING_PACKET_LEN)
+    }
+
+    pub(super) fn new(ip: IpAddr, timeout: Duration, len: usize) -> Self {
+        let (dst, sock) = match ip {
             IpAddr::V4(ip) => {
                 let dst = SocketAddrV4::new(ip, 0);
                 let sock = PingSocket::new(Domain::V4).expect("Get socket fail");
@@ -54,29 +55,32 @@ impl Pinger {
             }
         };
 
+        let dst= (dst, ip.to_string());
+
         Self {
             sock,
-            timeout: comm.timeout,
-            dst_addr: comm.address,
-            interval: comm.interval,
+            timeout,
             dst,
-            len: PING_PACKET_LEN,
+            len,
         }
     }
 
-    pub(super) async fn loop_ping(&self, result_tx: ResultTx, mut rx: ExitSignalRx, tx: ExitedTx) {
+    pub(super) async fn loop_ping(
+        &self,
+        interval: Duration,
+        result_tx: ResultTx,
+        mut rx: ExitSignalRx,
+        tx: ExitedTx,
+    ) {
         let mut seq = Wrapping(0_u16);
 
-        let mut interval = time::interval(self.interval);
+        let mut interval = time::interval(interval);
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
             interval.tick().await;
 
             seq += Wrapping(1);
-            if seq == Wrapping(0) {
-                seq += Wrapping(1);
-            }
 
             let result = self.ping(seq.0).await.expect("Send/Recv ping fail");
 
@@ -95,8 +99,8 @@ impl Pinger {
         }
     }
 
-    async fn ping(&self, seq: u16) -> io::Result<PingResult> {
-        self.sock.send_request(seq, self.len, &self.dst).await?;
+    async fn ping(&self, seq: u16) -> Result<PingResult> {
+        self.sock.send_request(seq, self.len, &self.dst.0).await?;
 
         let utc_send_at = Utc::now();
         let result = time::timeout(self.timeout, self.sock.recv_reply(seq, self.len)).await;
@@ -106,7 +110,7 @@ impl Pinger {
                 let utc_recv_at = Utc::now();
                 let rtt = (utc_recv_at - utc_send_at).to_std().unwrap();
                 Ok(PingResult {
-                    address: self.dst_addr.clone(),
+                    address: self.dst.1.clone(),
                     is_timeout: false,
                     send_at: utc_send_at,
                     rtt: Some(rtt),
@@ -114,7 +118,7 @@ impl Pinger {
             }
             Ok(Err(e)) => Err(e),
             Err(_) => Ok(PingResult {
-                address: self.dst_addr.clone(),
+                address: self.dst.1.clone(),
                 is_timeout: true,
                 send_at: utc_send_at,
                 rtt: None,
@@ -129,13 +133,12 @@ pub(crate) struct PingSocket {
 
 impl PingSocket {
     pub(crate) fn new(domain: Domain) -> Result<Self> {
-        let domain = match domain {
-            Domain::V4 => socket2::Domain::IPV4,
-            Domain::V6 => socket2::Domain::IPV6,
+        let (domain, protocol) = match domain {
+            Domain::V4 => (socket2::Domain::IPV4, Some(Protocol::ICMPV4)),
+            Domain::V6 => (socket2::Domain::IPV6, Some(Protocol::ICMPV6)),
         };
         let dgram = Type::DGRAM;
-        let icmp4 = Some(Protocol::ICMPV4);
-        let inner = Socket::new(domain, dgram, icmp4)?;
+        let inner = Socket::new(domain, dgram, protocol)?;
         inner.set_nonblocking(true)?;
         let inner = AsyncFd::new(inner)?;
         Ok(Self { inner })
