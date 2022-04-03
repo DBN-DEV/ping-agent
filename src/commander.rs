@@ -164,7 +164,7 @@ impl Commander {
             if let Ok(command) = command {
                 v.push(command);
             } else {
-                warn!("Parse ip:{} fail skip this addr", ip);
+                warn!("Parse ip:{} fail, skip this addr", ip);
             }
         }
 
