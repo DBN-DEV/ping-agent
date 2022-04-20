@@ -1,3 +1,5 @@
+extern crate core;
+
 mod commander;
 mod detectors;
 mod grpc;
@@ -5,7 +7,7 @@ mod reporter;
 mod structures;
 
 use crate::commander::SuperCommander;
-use detectors::{PingDetector, TcpPingDetector};
+use detectors::{PingDetector, TcpPingDetector, };
 use futures::future;
 use reporter::Reporter;
 use std::env;
@@ -13,6 +15,7 @@ use std::process;
 use tokio::sync::mpsc;
 use tokio::task;
 use tracing::error;
+use crate::detectors::FpingDetector;
 
 const LOG_LEVEL: tracing::Level = tracing::Level::INFO;
 
@@ -25,11 +28,6 @@ async fn main() {
     let reporter_addr = format!("http://{}", &args[2]);
     let agent_id: u32 = args[3].parse().unwrap();
 
-    let (ping_command_tx, ping_command_rx) = mpsc::channel(16);
-    let (tcp_ping_command_tx, tcp_ping_command_rx) = mpsc::channel(16);
-    let (ping_result_tx, ping_result_rx) = mpsc::channel(1024);
-    let (tcp_ping_result_tx, tcp_ping_result_rx) = mpsc::channel(1024);
-
     let super_commander = SuperCommander::new(&controller_addr, agent_id);
     let super_commander = match super_commander {
         Ok(commander) => commander,
@@ -38,8 +36,7 @@ async fn main() {
             process::abort();
         }
     };
-    let ping_detector = PingDetector::new();
-    let tcp_ping_detector = TcpPingDetector::new();
+
     let reporter = Reporter::new(&reporter_addr, agent_id);
     let reporter = match reporter {
         Ok(reporter) => reporter,
@@ -49,9 +46,13 @@ async fn main() {
         }
     };
 
-    let mut handlers = vec![];
+    let mut handlers = Vec::new();
 
+    // icmp ping pipe
+    let (ping_command_tx, ping_command_rx) = mpsc::channel(16);
+    let (ping_result_tx, ping_result_rx) = mpsc::channel(1024);
     let c = super_commander.build_commander();
+    let ping_detector = PingDetector::new();
     handlers.push(task::spawn(c.forward_ping_command(ping_command_tx)));
     handlers.push(task::spawn(
         ping_detector.detect(ping_command_rx, ping_result_tx),
@@ -59,6 +60,10 @@ async fn main() {
     let r = reporter.clone();
     handlers.push(task::spawn(r.report_ping_result(ping_result_rx)));
 
+    // tcp ping pipe
+    let (tcp_ping_command_tx, tcp_ping_command_rx) = mpsc::channel(16);
+    let (tcp_ping_result_tx, tcp_ping_result_rx) = mpsc::channel(1024);
+    let tcp_ping_detector = TcpPingDetector::new();
     let c = super_commander.build_commander();
     handlers.push(task::spawn(c.forward_tcp_ping_command(tcp_ping_command_tx)));
     handlers.push(task::spawn(
@@ -66,6 +71,15 @@ async fn main() {
     ));
     let r = reporter.clone();
     handlers.push(task::spawn(r.report_tcp_ping_result(tcp_ping_result_rx)));
+
+    // fping pipe
+    let (fping_command_tx, fping_command_rx) = mpsc::channel(16);
+    let (fping_result_tx, fping_result_rx) = mpsc::channel(1024);
+    let c = super_commander.build_commander();
+    handlers.push(task::spawn(c.forward_fping_command(fping_command_tx)));
+    handlers.push(task::spawn(FpingDetector::detect(fping_command_rx, fping_result_tx)));
+    let r = reporter.clone();
+    handlers.push(task::spawn(r.report_fping_result(fping_result_rx)));
 
     handlers.push(task::spawn(super_commander.register()));
 

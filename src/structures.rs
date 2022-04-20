@@ -140,6 +140,16 @@ impl From<FPingResult> for GrpcFPingResult {
     }
 }
 
+impl From<&PingResult> for FPingResult {
+    fn from(v: &PingResult) -> Self {
+        Self {
+            ip: v.address.clone(),
+            is_timeout: v.is_timeout,
+            rtt: v.rtt,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct FPingResults {
     pub results: Vec<FPingResult>,

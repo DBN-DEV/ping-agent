@@ -1,6 +1,6 @@
 use crate::grpc::collector_grpc::collector_client::CollectorClient;
-use crate::grpc::collector_grpc::{PingReportReq, TcpPingReportReq};
-use crate::structures::{PingResult, TcpPingResult};
+use crate::grpc::collector_grpc::{FPingReportReq, PingReportReq, TcpPingReportReq};
+use crate::structures::{FPingResults, PingResult, TcpPingResult};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use std::str::FromStr;
@@ -19,6 +19,7 @@ const BATCH_INTERVAL: Duration = Duration::from_secs(1);
 
 type PingResultRx = mpsc::Receiver<PingResult>;
 type TcpPingResultRx = mpsc::Receiver<TcpPingResult>;
+type FpingResultRx = mpsc::Receiver<FPingResults>;
 type FlushSignalTx = mpsc::Sender<()>;
 
 #[derive(Clone)]
@@ -47,6 +48,15 @@ impl Reporter {
         TcpPingReportReq {
             agent_id: self.agent_id,
             result: Some(result),
+        }
+    }
+
+    fn build_fping_request(&self, results: FPingResults) -> FPingReportReq {
+        let r = results.results.into_iter().map(|x| x.into()).collect();
+        FPingReportReq {
+            results: r,
+            agent_id: self.agent_id,
+            version: results.version
         }
     }
 
@@ -141,6 +151,35 @@ impl Reporter {
                     if let Err(e) = result {
                         warn!("Send tcp ping result fail, err:{}", e.message());
                         failed_tx.send(req).await.expect("Secv failed tcp ping req fail");
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) async fn report_fping_result(self, mut rx: FpingResultRx) {
+        let mut client = CollectorClient::new(self.channel.clone());
+        let (failed_tx, mut failed_rx) = mpsc::channel::<FPingReportReq>(1);
+        loop {
+            tokio::select! {
+                biased;
+
+                req = failed_rx.recv() => {
+                    let req = req.unwrap();
+                    let result = client.fping_report(req.clone()).await;
+                    if let Err(e) = result {
+                        warn!("Send fping result fail, err:{}", e.message());
+                        failed_tx.send(req).await.unwrap();
+                        Self::backoff().await;
+                    }
+                }
+                r = rx.recv() => {
+                    let r = r.unwrap();
+                    let req = self.build_fping_request(r);
+                    let result = client.fping_report(req.clone()).await;
+                    if let Err(e) = result {
+                        warn!("Send fping result fail, err:{}", e.message());
+                        failed_tx.send(req).await.unwrap();
                     }
                 }
             }

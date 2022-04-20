@@ -1,8 +1,9 @@
 use crate::grpc::controller_grpc::controller_client::ControllerClient;
 use crate::grpc::controller_grpc::{
-    CommandReq, CommandType, PingCommandsResp, RegisterReq, TcpPingCommandResp, UpdateCommandResp,
+    CommandReq, CommandType, PingCommandsResp, RegisterReq, TcpPingCommandResp,
+    UpdateCommandResp,
 };
-use crate::structures::{PingCommand, TcpPingCommand};
+use crate::structures::{FPingCommand, PingCommand, TcpPingCommand};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use std::convert::TryFrom;
 use std::result::Result::Err;
@@ -217,5 +218,44 @@ impl Commander {
         }
 
         v
+    }
+
+    pub(crate) async fn forward_fping_command(mut self, tx: Sender<FPingCommand>) {
+        let mut client = Client::new(self.channel.clone());
+        loop {
+            let comm = match self.rx.recv().await {
+                Ok(c) => c,
+                Err(RecvError::Lagged(v)) => {
+                    warn!("Recv fping command lagged skipped:{}", v);
+                    continue;
+                }
+                Err(RecvError::Closed) => panic!("Recv fping command on closed channel"),
+            };
+
+            if comm.command_type != CommandType::Fping as i32 {
+                continue;
+            }
+            info!("Recv fping command update");
+
+            let req = self.build_command_req(comm.version);
+
+            info!("Send get fping command req version:{}", req.version);
+            let resp = client.get_fping_command(req).await;
+            match resp {
+                Ok(resp) => {
+                    let resp = resp.into_inner();
+                    info!("Recv fping commands len:{}", resp.ip_addrs.len());
+                    let resp = match resp.try_into() {
+                        Ok(r) => r,
+                        Err(e) => {
+                            warn!("Fail to parse fping addr err:{}, skip this command", e);
+                            continue;
+                        }
+                    };
+                    tx.send(resp).await.unwrap();
+                }
+                Err(e) => warn!("Get fping command fail, err:{}", e.message()),
+            }
+        }
     }
 }

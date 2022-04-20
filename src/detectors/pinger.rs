@@ -22,7 +22,7 @@ type ResultTx = tokio::sync::mpsc::Sender<PingResult>;
 type ExitSignalRx = broadcast::Receiver<()>;
 type ExitedTx = tokio::sync::mpsc::Sender<()>;
 
-pub(crate) enum Domain {
+pub(super) enum Domain {
     V4,
     V6,
 }
@@ -55,7 +55,7 @@ impl Pinger {
             }
         };
 
-        let dst= (dst, ip.to_string());
+        let dst = (dst, ip.to_string());
 
         Self {
             sock,
@@ -99,7 +99,7 @@ impl Pinger {
         }
     }
 
-    async fn ping(&self, seq: u16) -> Result<PingResult> {
+    pub(super) async fn ping(&self, seq: u16) -> Result<PingResult> {
         self.sock.send_request(seq, self.len, &self.dst.0).await?;
 
         let utc_send_at = Utc::now();
@@ -132,7 +132,7 @@ pub(crate) struct PingSocket {
 }
 
 impl PingSocket {
-    pub(crate) fn new(domain: Domain) -> Result<Self> {
+    pub(super) fn new(domain: Domain) -> Result<Self> {
         let (domain, protocol) = match domain {
             Domain::V4 => (socket2::Domain::IPV4, Some(Protocol::ICMPV4)),
             Domain::V6 => (socket2::Domain::IPV6, Some(Protocol::ICMPV6)),
@@ -144,7 +144,7 @@ impl PingSocket {
         Ok(Self { inner })
     }
 
-    pub(crate) async fn send_to(&self, buf: &[u8], addr: &SockAddr) -> Result<usize> {
+    pub(super) async fn send_to(&self, buf: &[u8], addr: &SockAddr) -> Result<usize> {
         loop {
             let mut guard = self.inner.writable().await?;
 
@@ -155,7 +155,7 @@ impl PingSocket {
         }
     }
 
-    pub(crate) async fn read(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(super) async fn read(&self, buf: &mut [u8]) -> Result<usize> {
         loop {
             let mut guard = self.inner.readable().await?;
             match guard.try_io(|inner| inner.get_ref().read(buf)) {
@@ -180,7 +180,7 @@ impl PingSocket {
         buf.freeze()
     }
 
-    pub(crate) async fn send_request(&self, seq: u16, len: usize, addr: &SockAddr) -> Result<()> {
+    pub(super) async fn send_request(&self, seq: u16, len: usize, addr: &SockAddr) -> Result<()> {
         let buf = Self::build_request(seq, len);
         let result = self.send_to(&buf, addr).await?;
         if result != buf.len() {
@@ -189,7 +189,7 @@ impl PingSocket {
         Ok(())
     }
 
-    pub(crate) async fn recv_reply(&self, expect_seq: u16, len: usize) -> Result<()> {
+    pub(super) async fn recv_reply(&self, expect_seq: u16, len: usize) -> Result<()> {
         loop {
             let mut buf = BytesMut::with_capacity(len);
             buf.resize(len, 0);
