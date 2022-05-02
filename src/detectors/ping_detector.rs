@@ -6,10 +6,10 @@ use tokio::task;
 use tracing::info;
 
 type CommandRx = mpsc::Receiver<Vec<PingCommand>>;
-type ResultTx = tokio::sync::mpsc::Sender<PingResult>;
-type ExitSignalTx = tokio::sync::broadcast::Sender<()>;
-type ExitedTx = tokio::sync::mpsc::Sender<()>;
-type ExitedRx = tokio::sync::mpsc::Receiver<()>;
+type ResultTx = mpsc::Sender<PingResult>;
+type ExitSignalTx = broadcast::Sender<()>;
+type ExitedTx = mpsc::Sender<()>;
+type ExitedRx = mpsc::Receiver<()>;
 
 pub struct PingDetector {
     exited_tx: ExitedTx,
