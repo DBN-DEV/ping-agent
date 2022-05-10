@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = ".;grpc";
+option go_package = "./;pb";
 package controller_grpc;
 
 enum CommandType {
@@ -25,9 +25,18 @@ message CommandReq {
 }
 
 message GrpcPingCommand {
-  string IP = 1;
-  uint32 TimeoutMS = 2;
-  uint32 IntervalMS = 3;
+  uint64 ID = 1;
+  string IP = 2;
+  uint32 TimeoutMS = 3;
+  uint32 IntervalMS = 4;
+  uint32 DSCP = 5;
+}
+
+message GrpcFpingCommand {
+  uint64 ID = 1;
+  string IP = 2;
+  uint32 TimeoutMS = 3;
+  uint32 DSCP = 5;
 }
 
 message PingCommandsResp {
@@ -36,9 +45,10 @@ message PingCommandsResp {
 }
 
 message GrpcTcpPingCommand {
-  string Target = 1;
-  uint32 TimeoutMS = 2;
-  uint32 IntervalMS = 3;
+  uint64 ID = 1;
+  string Target = 2;
+  uint32 TimeoutMS = 3;
+  uint32 IntervalMS = 4;
 }
 
 message TcpPingCommandResp {
@@ -48,8 +58,7 @@ message TcpPingCommandResp {
 
 message FpingCommandResp {
   string Version = 1;
-  repeated string IPAddrs = 2;
-  uint32 TimeoutMS = 3;
+  repeated GrpcFpingCommand FpingCommands = 2;
 }
 
 message MtrCommandResp {

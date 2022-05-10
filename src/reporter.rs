@@ -1,6 +1,6 @@
 use crate::grpc::collector_grpc::collector_client::CollectorClient;
 use crate::grpc::collector_grpc::{FPingReportReq, PingReportReq, TcpPingReportReq};
-use crate::structures::{FPingResults, PingResult, TcpPingResult};
+use crate::structures::{FPingResult, PingResult, TcpPingResult};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use std::str::FromStr;
@@ -19,7 +19,7 @@ const BATCH_INTERVAL: Duration = Duration::from_secs(1);
 
 type PingResultRx = mpsc::Receiver<PingResult>;
 type TcpPingResultRx = mpsc::Receiver<TcpPingResult>;
-type FpingResultRx = mpsc::Receiver<FPingResults>;
+type FpingResultRx = mpsc::Receiver<Vec<FPingResult>>;
 type FlushSignalTx = mpsc::Sender<()>;
 
 #[derive(Clone)]
@@ -51,12 +51,11 @@ impl Reporter {
         }
     }
 
-    fn build_fping_request(&self, results: FPingResults) -> FPingReportReq {
-        let r = results.results.into_iter().map(|x| x.into()).collect();
+    fn build_fping_request(&self, results: Vec<FPingResult>) -> FPingReportReq {
+        let r = results.into_iter().map(|x| x.into()).collect();
         FPingReportReq {
             results: r,
             agent_id: self.agent_id,
-            version: results.version
         }
     }
 

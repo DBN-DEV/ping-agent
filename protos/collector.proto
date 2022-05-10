@@ -1,15 +1,15 @@
 syntax = "proto3";
 
-option go_package = ".;grpc";
+option go_package = "./;pb";
 package collector_grpc;
 
 message Empty {}
 
 message GrpcPingResult {
-  string IP = 1;
+  uint64 ID = 1;
   bool IsTimeout = 2;
   uint32 RttMicros = 3;
-  int64 UTCSendAt = 4;
+  int64 SendAt = 4;
 }
 
 message PingReportReq {
@@ -18,10 +18,10 @@ message PingReportReq {
 }
 
 message GrpcTcpPingResult {
-  string Target = 1;
+  uint64 ID = 1;
   bool IsTimeout = 2;
   uint32 RttMicros = 3;
-  int64 UTCSendAt = 4;
+  int64 SendAt = 4;
 }
 
 message TcpPingReportReq {
@@ -30,7 +30,7 @@ message TcpPingReportReq {
 }
 
 message GrpcFPingResult {
-  string IP = 1;
+  uint64 ID = 1;
   bool IsTimeout = 2;
   uint32 RttMicros = 3;
 }
@@ -38,7 +38,6 @@ message GrpcFPingResult {
 message FPingReportReq {
   repeated GrpcFPingResult Results = 1;
   uint32 AgentID = 2;
-  string Version = 3;
 }
 
 message GrpcMTRResult {
@@ -51,7 +50,6 @@ message GrpcMTRResult {
 message MTRReportReq {
   repeated GrpcMTRResult Results = 1;
   uint32 AgentID = 2;
-  string Version = 3;
 }
 
 service Collector {

@@ -1,7 +1,6 @@
 use crate::grpc::controller_grpc::controller_client::ControllerClient;
 use crate::grpc::controller_grpc::{
-    CommandReq, CommandType, PingCommandsResp, RegisterReq, TcpPingCommandResp,
-    UpdateCommandResp,
+    CommandReq, CommandType, PingCommandsResp, RegisterReq, TcpPingCommandResp, UpdateCommandResp,
 };
 use crate::structures::{FPingCommand, PingCommand, TcpPingCommand};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
@@ -220,7 +219,7 @@ impl Commander {
         v
     }
 
-    pub(crate) async fn forward_fping_command(mut self, tx: Sender<FPingCommand>) {
+    pub(crate) async fn forward_fping_command(mut self, tx: Sender<Vec<FPingCommand>>) {
         let mut client = Client::new(self.channel.clone());
         loop {
             let comm = match self.rx.recv().await {
@@ -244,15 +243,19 @@ impl Commander {
             match resp {
                 Ok(resp) => {
                     let resp = resp.into_inner();
-                    info!("Recv fping commands len:{}", resp.ip_addrs.len());
-                    let resp = match resp.try_into() {
-                        Ok(r) => r,
-                        Err(e) => {
-                            warn!("Fail to parse fping addr err:{}, skip this command", e);
-                            continue;
-                        }
-                    };
-                    tx.send(resp).await.unwrap();
+                    info!("Recv fping commands len:{}", resp.fping_commands.len());
+                    let mut commands = Vec::with_capacity(resp.fping_commands.len());
+                    for command in resp.fping_commands {
+                        let command = match command.try_into() {
+                            Ok(command) => command,
+                            Err(e) => {
+                                warn!("Parse ip addr fail, err:{}", e);
+                                continue;
+                            }
+                        };
+                        commands.push(command);
+                    }
+                    tx.send(commands).await.unwrap();
                 }
                 Err(e) => warn!("Get fping command fail, err:{}", e.message()),
             }

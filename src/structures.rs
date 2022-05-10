@@ -2,7 +2,7 @@ use crate::grpc::collector_grpc::{
     GrpcFPingResult, GrpcMtrResult, GrpcPingResult, GrpcTcpPingResult,
 };
 use crate::grpc::controller_grpc::{
-    FpingCommandResp, GrpcPingCommand, GrpcTcpPingCommand, MtrCommandResp,
+    GrpcFpingCommand, GrpcPingCommand, GrpcTcpPingCommand, MtrCommandResp,
 };
 use chrono::{DateTime, Utc};
 use std::convert::TryFrom;
@@ -12,9 +12,11 @@ use std::time::Duration;
 
 #[derive(Debug)]
 pub struct PingCommand {
+    pub id: u64,
     pub ip: IpAddr,
     pub interval: Duration,
     pub timeout: Duration,
+    pub dscp: u32,
 }
 
 impl TryFrom<GrpcPingCommand> for PingCommand {
@@ -23,18 +25,20 @@ impl TryFrom<GrpcPingCommand> for PingCommand {
     fn try_from(c: GrpcPingCommand) -> Result<Self, Self::Error> {
         let ip = c.ip.parse::<IpAddr>()?;
         Ok(Self {
+            id: c.id,
             ip,
             interval: Duration::from_millis(u64::from(c.interval_ms)),
             timeout: Duration::from_millis(u64::from(c.timeout_ms)),
+            dscp: c.dscp,
         })
     }
 }
 
 #[derive(Debug)]
 pub struct PingResult {
-    pub address: String,
+    pub id: u64,
     pub is_timeout: bool,
-    pub send_at: chrono::DateTime<Utc>,
+    pub send_at: DateTime<Utc>,
     pub rtt: Option<Duration>,
 }
 
@@ -45,16 +49,17 @@ impl From<PingResult> for GrpcPingResult {
             rtt_micros = rtt.as_micros() as u32;
         }
         GrpcPingResult {
-            ip: v.address,
+            id: v.id,
             is_timeout: v.is_timeout,
             rtt_micros,
-            utc_send_at: v.send_at.timestamp(),
+            send_at: v.send_at.timestamp(),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct TcpPingCommand {
+    pub id: u64,
     pub target: String,
     pub interval: Duration,
     pub timeout: Duration,
@@ -63,6 +68,7 @@ pub struct TcpPingCommand {
 impl From<GrpcTcpPingCommand> for TcpPingCommand {
     fn from(c: GrpcTcpPingCommand) -> Self {
         Self {
+            id: c.id,
             target: c.target,
             interval: Duration::from_millis(u64::from(c.interval_ms)),
             timeout: Duration::from_millis(u64::from(c.timeout_ms)),
@@ -72,7 +78,7 @@ impl From<GrpcTcpPingCommand> for TcpPingCommand {
 
 #[derive(Debug)]
 pub struct TcpPingResult {
-    pub target: String,
+    pub id: u64,
     pub is_timeout: bool,
     pub send_at: DateTime<Utc>,
     pub rtt: Option<Duration>,
@@ -85,42 +91,40 @@ impl From<TcpPingResult> for GrpcTcpPingResult {
             rtt_micros = rtt.as_micros() as u32;
         }
         GrpcTcpPingResult {
-            target: v.target,
+            id: v.id,
             is_timeout: v.is_timeout,
             rtt_micros,
-            utc_send_at: v.send_at.timestamp(),
+            send_at: v.send_at.timestamp(),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct FPingCommand {
-    pub version: String,
-    pub ips: Vec<IpAddr>,
+    pub id: u64,
+    pub ip: IpAddr,
     pub timeout: Duration,
+    pub dscp: u32,
 }
 
-impl TryFrom<FpingCommandResp> for FPingCommand {
+impl TryFrom<GrpcFpingCommand> for FPingCommand {
     type Error = AddrParseError;
 
-    fn try_from(value: FpingCommandResp) -> Result<Self, Self::Error> {
-        let mut ips = Vec::with_capacity(value.ip_addrs.len());
-        for ip in value.ip_addrs.iter() {
-            let ip = ip.parse::<IpAddr>()?;
-            ips.push(ip);
-        }
+    fn try_from(value: GrpcFpingCommand) -> Result<Self, Self::Error> {
+        let ip = value.ip.parse::<IpAddr>()?;
 
         Ok(Self {
-            version: value.version,
-            ips,
+            id: value.id,
+            ip,
             timeout: Duration::from_millis(u64::from(value.timeout_ms)),
+            dscp: value.dscp,
         })
     }
 }
 
 #[derive(Debug)]
 pub struct FPingResult {
-    pub ip: String,
+    pub id: u64,
     pub is_timeout: bool,
     pub rtt: Option<Duration>,
 }
@@ -133,7 +137,7 @@ impl From<FPingResult> for GrpcFPingResult {
         }
 
         GrpcFPingResult {
-            ip: v.ip,
+            id: v.id,
             is_timeout: v.is_timeout,
             rtt_micros: rtt,
         }
@@ -143,17 +147,11 @@ impl From<FPingResult> for GrpcFPingResult {
 impl From<&PingResult> for FPingResult {
     fn from(v: &PingResult) -> Self {
         Self {
-            ip: v.address.clone(),
+            id: v.id,
             is_timeout: v.is_timeout,
             rtt: v.rtt,
         }
     }
-}
-
-#[derive(Debug)]
-pub struct FPingResults {
-    pub results: Vec<FPingResult>,
-    pub version: String,
 }
 
 #[derive(Debug)]

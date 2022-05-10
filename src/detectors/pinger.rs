@@ -1,4 +1,4 @@
-use crate::structures::{PingCommand, PingResult};
+use crate::structures::{FPingCommand, PingCommand, PingResult};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use chrono::Utc;
 use socket2::{Protocol, SockAddr, Socket, Type};
@@ -28,6 +28,7 @@ pub(super) enum Domain {
 }
 
 pub(super) struct Pinger {
+    id: u64,
     sock: PingSocket,
     timeout: Duration,
     dst: (SockAddr, String),
@@ -36,10 +37,14 @@ pub(super) struct Pinger {
 
 impl Pinger {
     pub(super) fn from_ping_command(comm: &PingCommand) -> Self {
-        Self::new(comm.ip, comm.timeout, PING_PACKET_LEN)
+        Self::new(comm.id, comm.ip, comm.timeout, PING_PACKET_LEN)
     }
 
-    pub(super) fn new(ip: IpAddr, timeout: Duration, len: usize) -> Self {
+    pub(super) fn from_fping_command(comm: &FPingCommand) -> Self {
+        Self::new(comm.id, comm.ip, comm.timeout, PING_PACKET_LEN)
+    }
+
+    pub(super) fn new(id: u64, ip: IpAddr, timeout: Duration, len: usize) -> Self {
         let (dst, sock) = match ip {
             IpAddr::V4(ip) => {
                 let dst = SocketAddrV4::new(ip, 0);
@@ -58,6 +63,7 @@ impl Pinger {
         let dst = (dst, ip.to_string());
 
         Self {
+            id,
             sock,
             timeout,
             dst,
@@ -110,7 +116,7 @@ impl Pinger {
                 let utc_recv_at = Utc::now();
                 let rtt = (utc_recv_at - utc_send_at).to_std().unwrap();
                 Ok(PingResult {
-                    address: self.dst.1.clone(),
+                    id: self.id,
                     is_timeout: false,
                     send_at: utc_send_at,
                     rtt: Some(rtt),
@@ -118,7 +124,7 @@ impl Pinger {
             }
             Ok(Err(e)) => Err(e),
             Err(_) => Ok(PingResult {
-                address: self.dst.1.clone(),
+                id: self.id,
                 is_timeout: true,
                 send_at: utc_send_at,
                 rtt: None,

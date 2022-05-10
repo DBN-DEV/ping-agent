@@ -1,14 +1,12 @@
 use crate::detectors::pinger::Pinger;
-use crate::structures::{FPingCommand, FPingResults};
+use crate::structures::{FPingCommand, FPingResult};
 use futures::future::join_all;
 use std::sync::Arc;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::Mutex;
 
-type CommandRx = Receiver<FPingCommand>;
-type ResultTx = Sender<FPingResults>;
-
-const PING_PACKET_LEN: usize = 64;
+type CommandRx = Receiver<Vec<FPingCommand>>;
+type ResultTx = Sender<Vec<FPingResult>>;
 
 pub struct FpingDetector {}
 
@@ -20,15 +18,15 @@ impl FpingDetector {
         }
     }
 
-    async fn detect_once(command: FPingCommand, result_tx: ResultTx) {
-        let results = Vec::with_capacity(command.ips.len());
+    async fn detect_once(commands: Vec<FPingCommand>, result_tx: ResultTx) {
+        let results = Vec::with_capacity(commands.len());
         let results = Arc::new(Mutex::new(results));
-        let mut handlers = Vec::with_capacity(command.ips.len());
+        let mut handlers = Vec::with_capacity(commands.len());
 
-        for ip in command.ips {
+        for comm in commands {
             let results = results.clone();
             let h = tokio::spawn(async move {
-                let pinger = Pinger::new(ip, command.timeout, PING_PACKET_LEN);
+                let pinger = Pinger::from_fping_command(&comm);
                 let result = pinger.ping(1).await.unwrap();
                 let mut results = results.lock().await;
                 results.push(result);
@@ -40,10 +38,6 @@ impl FpingDetector {
 
         let results = results.lock().await;
         let results = results.iter().map(|x| x.into()).collect();
-        let results = FPingResults {
-            results,
-            version: command.version,
-        };
         result_tx.send(results).await.unwrap();
     }
 }

@@ -7,7 +7,8 @@ mod reporter;
 mod structures;
 
 use crate::commander::SuperCommander;
-use detectors::{PingDetector, TcpPingDetector, };
+use crate::detectors::FpingDetector;
+use detectors::{PingDetector, TcpPingDetector};
 use futures::future;
 use reporter::Reporter;
 use std::env;
@@ -15,7 +16,6 @@ use std::process;
 use tokio::sync::mpsc;
 use tokio::task;
 use tracing::error;
-use crate::detectors::FpingDetector;
 
 const LOG_LEVEL: tracing::Level = tracing::Level::INFO;
 
@@ -77,7 +77,10 @@ async fn main() {
     let (fping_result_tx, fping_result_rx) = mpsc::channel(1024);
     let c = super_commander.build_commander();
     handlers.push(task::spawn(c.forward_fping_command(fping_command_tx)));
-    handlers.push(task::spawn(FpingDetector::detect(fping_command_rx, fping_result_tx)));
+    handlers.push(task::spawn(FpingDetector::detect(
+        fping_command_rx,
+        fping_result_tx,
+    )));
     let r = reporter.clone();
     handlers.push(task::spawn(r.report_fping_result(fping_result_rx)));
 

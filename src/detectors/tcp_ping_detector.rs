@@ -1,7 +1,6 @@
 use crate::structures::{TcpPingCommand, TcpPingResult};
 use chrono::Utc;
 use std::io;
-use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::TryRecvError;
@@ -22,32 +21,26 @@ type ResultTx = mpsc::Sender<TcpPingResult>;
 type CommandRx = mpsc::Receiver<Vec<TcpPingCommand>>;
 
 struct TcpPinger {
-    target: String,
-    timeout: Duration,
-    interval: Duration,
+    comm: TcpPingCommand,
 }
 
 impl TcpPinger {
     fn from_command(comm: TcpPingCommand) -> Self {
-        Self {
-            target: comm.target,
-            timeout: comm.timeout,
-            interval: comm.interval,
-        }
+        Self { comm }
     }
 
     async fn ping(&self) -> io::Result<TcpPingResult> {
-        let conn = TcpStream::connect(self.target.clone());
+        let conn = TcpStream::connect(self.comm.target.clone());
 
         let utc_send_at = Utc::now();
 
-        let result = time::timeout(self.timeout, conn).await;
+        let result = time::timeout(self.comm.timeout, conn).await;
         match result {
             Ok(Ok(_)) => {
                 let utc_recv_at = Utc::now();
                 let rtt = (utc_recv_at - utc_send_at).to_std().unwrap();
                 Ok(TcpPingResult {
-                    target: self.target.clone(),
+                    id: self.comm.id,
                     is_timeout: false,
                     send_at: utc_send_at,
                     rtt: Some(rtt),
@@ -55,7 +48,7 @@ impl TcpPinger {
             }
             Ok(Err(e)) => Err(e),
             Err(_) => Ok(TcpPingResult {
-                target: self.target.clone(),
+                id: self.comm.id,
                 is_timeout: true,
                 send_at: utc_send_at,
                 rtt: None,
@@ -64,7 +57,7 @@ impl TcpPinger {
     }
 
     async fn loop_ping(&self, result_tx: ResultTx, mut rx: ExitSignalRx, tx: ExitedTx) {
-        let mut interval = time::interval(self.interval);
+        let mut interval = time::interval(self.comm.interval);
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             interval.tick().await;
@@ -73,7 +66,7 @@ impl TcpPinger {
 
             match result {
                 Ok(r) => result_tx.send(r).await.expect("Send tcp ping result fail"),
-                Err(e) => warn!("Tcp ping fail target:{}, err:{}", self.target, e),
+                Err(e) => warn!("Tcp ping fail target:{}, err:{}", self.comm.target, e),
             }
 
             match rx.try_recv() {
