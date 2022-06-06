@@ -43,11 +43,11 @@ impl Reporter {
         }
     }
 
-    fn build_tcp_ping_request(&self, result: TcpPingResult) -> TcpPingReportReq {
-        let result = result.into();
+    fn build_tcp_ping_request(&self, results: Vec<TcpPingResult>) -> TcpPingReportReq {
+        let r = results.into_iter().map(|x| x.into()).collect();
         TcpPingReportReq {
             agent_id: self.agent_id,
-            result: Some(result),
+            results: r,
         }
     }
 
@@ -129,7 +129,12 @@ impl Reporter {
 
     pub(crate) async fn report_tcp_ping_result(self, mut rx: TcpPingResultRx) {
         let mut client = CollectorClient::new(self.channel.clone());
+        let (flush_buff_tx, mut flush_buff_rx) = mpsc::channel(1);
         let (failed_tx, mut failed_rx) = mpsc::channel::<TcpPingReportReq>(1);
+
+        Self::start_timer(BATCH_INTERVAL, flush_buff_tx.clone());
+        let mut buff = Vec::with_capacity(BATCH_SIZE);
+
         loop {
             tokio::select! {
                 biased;
@@ -143,13 +148,25 @@ impl Reporter {
                         Self::backoff().await;
                     }
                 }
-                r = rx.recv() => {
-                    let r = r.expect("Recv tcp ping result fail");
-                    let req = self.build_tcp_ping_request(r);
+                s = flush_buff_rx.recv() => {
+                    s.expect("Recv flush buff signal fail");
+                    if buff.is_empty() {
+                        continue
+                    }
+                    let req = self.build_tcp_ping_request(buff);
                     let result = client.tcp_ping_report(req.clone()).await;
                     if let Err(e) = result {
                         warn!("Send tcp ping result fail, err:{}", e.message());
-                        failed_tx.send(req).await.expect("Secv failed tcp ping req fail");
+                        failed_tx.send(req).await.expect("Secv failed req fail");
+                    }
+
+                    buff = Vec::with_capacity(BATCH_SIZE);
+                }
+                r = rx.recv() => {
+                    let r = r.expect("Recv tcp ping result fail");
+                    buff.push(r);
+                    if buff.len() == BATCH_SIZE {
+                        flush_buff_tx.send(()).await.expect("Send flush buff signal fail")
                     }
                 }
             }

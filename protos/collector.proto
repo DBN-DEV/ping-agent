@@ -25,7 +25,7 @@ message GrpcTcpPingResult {
 }
 
 message TcpPingReportReq {
-  GrpcTcpPingResult Result = 1;
+  repeated GrpcTcpPingResult Results = 1;
   uint32 AgentID = 2;
 }
 
