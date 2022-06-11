@@ -14,8 +14,8 @@ const LVL: tracing::Level = tracing::Level::INFO;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().with_max_level(LVL).init();
-    let conf = conf::read_conf().await;
-    let conf = conf.unwrap_or_else(|e| {
+
+    let conf = conf::read_conf().await.unwrap_or_else(|e| {
         error!("{}", e);
         process::exit(exitcode::CONFIG);
     });
@@ -23,8 +23,8 @@ async fn main() {
     let super_commander = SuperCommander::new(&conf.controller.url, conf.agent.id);
     let super_commander = match super_commander {
         Ok(commander) => commander,
-        Err(_) => {
-            error!("Invalid controller url.");
+        Err(e) => {
+            error!("Parse controller url: {}", e);
             process::exit(exitcode::CONFIG);
         }
     };
@@ -32,13 +32,13 @@ async fn main() {
     let reporter = Reporter::new(&conf.collector.url, conf.agent.id);
     let reporter = match reporter {
         Ok(reporter) => reporter,
-        Err(_) => {
-            error!("Invalid collector url");
-            process::abort();
+        Err(e) => {
+            error!("Parse collector url: {}", e);
+            process::exit(exitcode::CONFIG);
         }
     };
 
-    let mut handlers = Vec::new();
+    let mut handlers = vec![];
 
     // icmp ping pipe
     let (ping_command_tx, ping_command_rx) = mpsc::channel(16);

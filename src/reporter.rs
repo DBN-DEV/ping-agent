@@ -1,8 +1,7 @@
+use super::backoff;
 use crate::grpc::collector_grpc::collector_client::CollectorClient;
 use crate::grpc::collector_grpc::{FPingReportReq, PingReportReq, TcpPingReportReq};
 use crate::structures::{FPingResult, PingResult, TcpPingResult};
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -11,9 +10,10 @@ use tokio::time;
 use tokio::time::MissedTickBehavior;
 use tonic::codegen::http::uri::InvalidUri;
 use tonic::transport::{Channel, Uri};
-use tracing::{info, warn};
+use tracing::warn;
 
-const RETRY_INTERVAL: u64 = 10;
+const RETRY_INTERVAL_MIN: u64 = 5;
+const RETRY_INTERVAL_MAX: u64 = 15;
 const BATCH_SIZE: usize = 1024;
 const BATCH_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -59,15 +59,6 @@ impl Reporter {
         }
     }
 
-    async fn backoff() {
-        let rand_num = SmallRng::from_entropy().gen_range(0..=5);
-        let wait_sec = RETRY_INTERVAL + rand_num;
-        info!("Wait {} sec retry", wait_sec);
-
-        let wait = Duration::from_secs(wait_sec);
-        time::sleep(wait).await;
-    }
-
     fn start_timer(period: Duration, tx: FlushSignalTx) {
         let mut timer = time::interval(period);
         timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -98,7 +89,7 @@ impl Reporter {
                     if let Err(e) = result {
                         warn!("Send ping result fail, err:{}", e.message());
                         failed_tx.send(req).await.expect("Secv failed ping req fail");
-                        Self::backoff().await;
+                        backoff!(RETRY_INTERVAL_MIN, RETRY_INTERVAL_MAX);
                     }
                 }
                 s = flush_buff_rx.recv() => {
@@ -145,7 +136,7 @@ impl Reporter {
                     if let Err(e) = result {
                         warn!("Send ping result fail, err:{}", e.message());
                         failed_tx.send(req).await.expect("Secv failed tcp ping req fail");
-                        Self::backoff().await;
+                        backoff!(RETRY_INTERVAL_MIN, RETRY_INTERVAL_MAX);
                     }
                 }
                 s = flush_buff_rx.recv() => {
@@ -186,7 +177,7 @@ impl Reporter {
                     if let Err(e) = result {
                         warn!("Send fping result fail, err:{}", e.message());
                         failed_tx.send(req).await.unwrap();
-                        Self::backoff().await;
+                        backoff!(RETRY_INTERVAL_MIN, RETRY_INTERVAL_MAX);
                     }
                 }
                 r = rx.recv() => {

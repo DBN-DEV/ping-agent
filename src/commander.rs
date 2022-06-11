@@ -3,22 +3,20 @@ use crate::grpc::controller_grpc::{
     CommandReq, CommandType, PingCommandsResp, RegisterReq, TcpPingCommandResp, UpdateCommandResp,
 };
 use crate::structures::{FPingCommand, PingCommand, TcpPingCommand};
-use rand::{rngs::SmallRng, Rng, SeedableRng};
 use std::convert::TryFrom;
 use std::result::Result::Err;
 use std::str::FromStr;
-use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc::Sender;
-use tokio::time;
 use tonic::codec::Streaming;
 use tonic::codegen::http::uri::InvalidUri;
 use tonic::transport::{Channel, Uri};
 use tonic::{Code, Status};
 use tracing::{info, warn};
 
-const RETRY_INTERVAL: u64 = 10;
+const RETRY_INTERVAL_MIN: u64 = 5;
+const RETRY_INTERVAL_MAX: u64 = 15;
 
 type Client = ControllerClient<Channel>;
 
@@ -70,16 +68,9 @@ impl SuperCommander {
         }
     }
 
-    async fn backoff() {
-        let rand_num = SmallRng::from_entropy().gen_range(0..=5);
-        let wait_sec = RETRY_INTERVAL + rand_num;
-        info!("Wait {} sec retry", wait_sec);
-
-        let wait = Duration::from_secs(wait_sec);
-        time::sleep(wait).await;
-    }
-
     pub async fn register(self) {
+        use super::backoff;
+
         loop {
             info!("Start register");
             let mut client = Client::new(self.channel.clone());
@@ -101,7 +92,7 @@ impl SuperCommander {
                 }
                 Err(e) => {
                     warn!("Register fail err:{}", e.message());
-                    Self::backoff().await;
+                    backoff!(RETRY_INTERVAL_MIN, RETRY_INTERVAL_MAX);
                 }
             }
         }
