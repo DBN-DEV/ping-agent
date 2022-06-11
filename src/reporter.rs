@@ -80,7 +80,7 @@ impl Reporter {
         });
     }
 
-    pub(crate) async fn report_ping_result(self, mut rx: PingResultRx) {
+    pub async fn report_ping_result(self, mut rx: PingResultRx) {
         let mut client = CollectorClient::new(self.channel.clone());
         let (failed_tx, mut failed_rx) = mpsc::channel::<PingReportReq>(1);
         let (flush_buff_tx, mut flush_buff_rx) = mpsc::channel(1);
@@ -127,7 +127,7 @@ impl Reporter {
         }
     }
 
-    pub(crate) async fn report_tcp_ping_result(self, mut rx: TcpPingResultRx) {
+    pub async fn report_tcp_ping_result(self, mut rx: TcpPingResultRx) {
         let mut client = CollectorClient::new(self.channel.clone());
         let (flush_buff_tx, mut flush_buff_rx) = mpsc::channel(1);
         let (failed_tx, mut failed_rx) = mpsc::channel::<TcpPingReportReq>(1);
@@ -173,7 +173,7 @@ impl Reporter {
         }
     }
 
-    pub(crate) async fn report_fping_result(self, mut rx: FpingResultRx) {
+    pub async fn report_fping_result(self, mut rx: FpingResultRx) {
         let mut client = CollectorClient::new(self.channel.clone());
         let (failed_tx, mut failed_rx) = mpsc::channel::<FPingReportReq>(1);
         loop {

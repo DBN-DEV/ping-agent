@@ -11,7 +11,7 @@ type ResultTx = Sender<Vec<FPingResult>>;
 pub struct FpingDetector {}
 
 impl FpingDetector {
-    pub(crate) async fn detect(mut command_rx: CommandRx, result_tx: ResultTx) {
+    pub async fn detect(mut command_rx: CommandRx, result_tx: ResultTx) {
         loop {
             let comm = command_rx.recv().await.unwrap();
             tokio::spawn(Self::detect_once(comm, result_tx.clone()));

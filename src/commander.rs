@@ -33,7 +33,7 @@ pub struct SuperCommander {
 }
 
 impl SuperCommander {
-    pub(crate) fn new(controller_add: &str, agent_id: u32) -> Result<Self, InvalidUri> {
+    pub fn new(controller_add: &str, agent_id: u32) -> Result<Self, InvalidUri> {
         let uri = Uri::from_str(controller_add)?;
         let endpoint = Channel::builder(uri);
         let channel = endpoint.connect_lazy();
@@ -46,7 +46,7 @@ impl SuperCommander {
         })
     }
 
-    pub(crate) fn build_commander(&self) -> Commander {
+    pub fn build_commander(&self) -> Commander {
         Commander {
             agent_id: self.agent_id,
             channel: self.channel.clone(),
@@ -79,7 +79,7 @@ impl SuperCommander {
         time::sleep(wait).await;
     }
 
-    pub(crate) async fn register(self) {
+    pub async fn register(self) {
         loop {
             info!("Start register");
             let mut client = Client::new(self.channel.clone());
@@ -123,7 +123,7 @@ impl Commander {
         }
     }
 
-    pub(crate) async fn forward_ping_command(mut self, tx: Sender<Vec<PingCommand>>) {
+    pub async fn forward_ping_command(mut self, tx: Sender<Vec<PingCommand>>) {
         let mut client = Client::new(self.channel.clone());
         loop {
             let comm = match self.rx.recv().await {
@@ -171,7 +171,7 @@ impl Commander {
         v
     }
 
-    pub(crate) async fn forward_tcp_ping_command(mut self, tx: Sender<Vec<TcpPingCommand>>) {
+    pub async fn forward_tcp_ping_command(mut self, tx: Sender<Vec<TcpPingCommand>>) {
         let mut client = Client::new(self.channel.clone());
         loop {
             let comm = match self.rx.recv().await {
@@ -219,7 +219,7 @@ impl Commander {
         v
     }
 
-    pub(crate) async fn forward_fping_command(mut self, tx: Sender<Vec<FPingCommand>>) {
+    pub async fn forward_fping_command(mut self, tx: Sender<Vec<FPingCommand>>) {
         let mut client = Client::new(self.channel.clone());
         loop {
             let comm = match self.rx.recv().await {

@@ -18,7 +18,7 @@ pub struct PingDetector {
 }
 
 impl PingDetector {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let (exited_tx, exited_rx) = mpsc::channel(10);
         let (exit_signal_tx, _) = broadcast::channel(1);
         Self {
@@ -50,7 +50,7 @@ impl PingDetector {
         }
     }
 
-    pub(crate) async fn detect(mut self, mut command_rx: CommandRx, result_tx: ResultTx) {
+    pub async fn detect(mut self, mut command_rx: CommandRx, result_tx: ResultTx) {
         loop {
             let commands = command_rx.recv().await.expect("Command rx fail");
             info!("Recv ping commands");

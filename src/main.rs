@@ -1,43 +1,35 @@
-extern crate core;
-
-mod commander;
-mod detectors;
-mod grpc;
-mod reporter;
-mod structures;
-
-use crate::commander::SuperCommander;
-use crate::detectors::FpingDetector;
-use detectors::{PingDetector, TcpPingDetector};
 use futures::future;
-use reporter::Reporter;
-use std::env;
+use ping_agent::commander::SuperCommander;
+use ping_agent::conf;
+use ping_agent::detectors::FpingDetector;
+use ping_agent::detectors::{PingDetector, TcpPingDetector};
+use ping_agent::reporter::Reporter;
 use std::process;
 use tokio::sync::mpsc;
 use tokio::task;
 use tracing::error;
 
-const LOG_LEVEL: tracing::Level = tracing::Level::INFO;
+const LVL: tracing::Level = tracing::Level::INFO;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().with_max_level(LOG_LEVEL).init();
+    tracing_subscriber::fmt().with_max_level(LVL).init();
+    let conf = conf::read_conf().await;
+    let conf = conf.unwrap_or_else(|e| {
+        error!("{}", e);
+        process::exit(exitcode::CONFIG);
+    });
 
-    let args: Vec<String> = env::args().collect();
-    let controller_addr = format!("http://{}", &args[1]);
-    let reporter_addr = format!("http://{}", &args[2]);
-    let agent_id: u32 = args[3].parse().unwrap();
-
-    let super_commander = SuperCommander::new(&controller_addr, agent_id);
+    let super_commander = SuperCommander::new(&conf.controller.url, conf.agent.id);
     let super_commander = match super_commander {
         Ok(commander) => commander,
         Err(_) => {
             error!("Invalid controller url.");
-            process::abort();
+            process::exit(exitcode::CONFIG);
         }
     };
 
-    let reporter = Reporter::new(&reporter_addr, agent_id);
+    let reporter = Reporter::new(&conf.collector.url, conf.agent.id);
     let reporter = match reporter {
         Ok(reporter) => reporter,
         Err(_) => {

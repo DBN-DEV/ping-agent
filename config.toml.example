@@ -1,0 +1,8 @@
+[agent]
+id=1
+
+[commander]
+addr=""
+
+[reporter]
+addr=""
