@@ -186,10 +186,8 @@ impl Commander {
             match resp {
                 Ok(resp) => {
                     let resp = resp.into_inner();
-                    info!(
-                        "Recv tcp ping commands len:{}",
-                        resp.tcp_ping_commands.len()
-                    );
+                    let len = resp.tcp_ping_commands.len();
+                    info!("Recv tcp ping commands len:{}", len);
                     let commands = Self::build_tcp_ping_commands(resp);
                     tx.send(commands)
                         .await

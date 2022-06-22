@@ -16,7 +16,6 @@ socket2 = "0.4"
 futures = "0.3"
 rand = { version = "0.8", features = ["small_rng"] }
 bytes = "1"
-chrono = "0.4"
 anyhow = "1"
 tonic = "0.7"
 prost = "0.10"

@@ -4,11 +4,10 @@ use crate::grpc::collector_grpc::{
 use crate::grpc::controller_grpc::{
     GrpcFpingCommand, GrpcPingCommand, GrpcTcpPingCommand, MtrCommandResp,
 };
-use chrono::{DateTime, Utc};
 use std::convert::TryFrom;
 use std::net::{AddrParseError, IpAddr};
 use std::option::Option::Some;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct PingCommand {
@@ -38,7 +37,7 @@ impl TryFrom<GrpcPingCommand> for PingCommand {
 pub struct PingResult {
     pub id: u64,
     pub is_timeout: bool,
-    pub send_at: DateTime<Utc>,
+    pub send_at: SystemTime,
     pub rtt: Option<Duration>,
 }
 
@@ -52,7 +51,7 @@ impl From<PingResult> for GrpcPingResult {
             id: v.id,
             is_timeout: v.is_timeout,
             rtt_micros,
-            send_at: v.send_at.timestamp(),
+            send_at: v.send_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
         }
     }
 }
@@ -80,7 +79,7 @@ impl From<GrpcTcpPingCommand> for TcpPingCommand {
 pub struct TcpPingResult {
     pub id: u64,
     pub is_timeout: bool,
-    pub send_at: DateTime<Utc>,
+    pub send_at: SystemTime,
     pub rtt: Option<Duration>,
 }
 
@@ -94,7 +93,7 @@ impl From<TcpPingResult> for GrpcTcpPingResult {
             id: v.id,
             is_timeout: v.is_timeout,
             rtt_micros,
-            send_at: v.send_at.timestamp(),
+            send_at: v.send_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
         }
     }
 }

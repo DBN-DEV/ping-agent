@@ -1,5 +1,4 @@
 use crate::structures::{TcpPingCommand, TcpPingResult};
-use chrono::Utc;
 use std::io;
 use tokio::net::TcpStream;
 use tokio::sync::broadcast;
@@ -32,17 +31,17 @@ impl TcpPinger {
     async fn ping(&self) -> io::Result<TcpPingResult> {
         let conn = TcpStream::connect(self.comm.target.clone());
 
-        let utc_send_at = Utc::now();
+        let send_at_sys = std::time::SystemTime::now();
+        let send_at = std::time::Instant::now();
 
         let result = time::timeout(self.comm.timeout, conn).await;
         match result {
             Ok(Ok(_)) => {
-                let utc_recv_at = Utc::now();
-                let rtt = (utc_recv_at - utc_send_at).to_std().unwrap();
+                let rtt = send_at.elapsed();
                 Ok(TcpPingResult {
                     id: self.comm.id,
                     is_timeout: false,
-                    send_at: utc_send_at,
+                    send_at: send_at_sys,
                     rtt: Some(rtt),
                 })
             }
@@ -50,7 +49,7 @@ impl TcpPinger {
             Err(_) => Ok(TcpPingResult {
                 id: self.comm.id,
                 is_timeout: true,
-                send_at: utc_send_at,
+                send_at: send_at_sys,
                 rtt: None,
             }),
         }

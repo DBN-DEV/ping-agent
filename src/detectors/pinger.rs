@@ -1,6 +1,5 @@
 use crate::structures::{FPingCommand, PingCommand, PingResult};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use chrono::Utc;
 use socket2::{Protocol, SockAddr, Socket, Type};
 use std::{
     io::{Read, Result},
@@ -108,17 +107,17 @@ impl Pinger {
     pub(super) async fn ping(&self, seq: u16) -> Result<PingResult> {
         self.sock.send_request(seq, self.len, &self.dst.0).await?;
 
-        let utc_send_at = Utc::now();
+        let send_at_sys = std::time::SystemTime::now();
+        let send_at = std::time::Instant::now();
         let result = time::timeout(self.timeout, self.sock.recv_reply(seq, self.len)).await;
 
         match result {
             Ok(Ok(())) => {
-                let utc_recv_at = Utc::now();
-                let rtt = (utc_recv_at - utc_send_at).to_std().unwrap();
+                let rtt = send_at.elapsed();
                 Ok(PingResult {
                     id: self.id,
                     is_timeout: false,
-                    send_at: utc_send_at,
+                    send_at: send_at_sys,
                     rtt: Some(rtt),
                 })
             }
@@ -126,7 +125,7 @@ impl Pinger {
             Err(_) => Ok(PingResult {
                 id: self.id,
                 is_timeout: true,
-                send_at: utc_send_at,
+                send_at: send_at_sys,
                 rtt: None,
             }),
         }
