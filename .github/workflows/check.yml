@@ -8,8 +8,10 @@ on:
 
 jobs:
   Clippy:
+    permissions: write-all
     runs-on: ubuntu-latest
     steps:
+    - uses: arduino/setup-protoc@v1
     - uses: actions/checkout@v3
     - run: rustup component add clippy
 
