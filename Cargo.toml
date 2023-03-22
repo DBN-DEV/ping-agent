@@ -25,7 +25,7 @@ tracing-attributes = "0.1"
 tracing-subscriber = "0.3"
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
-toml = "0.5"
+toml = "0.7"
 serde = { version = "1", features = ["derive"] }
 exitcode = "1"
 
