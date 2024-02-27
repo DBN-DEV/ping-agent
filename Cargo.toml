@@ -30,4 +30,4 @@ serde = { version = "1", features = ["derive"] }
 exitcode = "1"
 
 [build-dependencies]
-tonic-build = "0.8"
+tonic-build = "0.11"
