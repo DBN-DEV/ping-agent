@@ -11,7 +11,7 @@ jobs:
     permissions: write-all
     runs-on: ubuntu-latest
     steps:
-    - uses: arduino/setup-protoc@v1
+    - uses: arduino/setup-protoc@v3
     - uses: actions/checkout@v4
     - run: rustup component add clippy
 
